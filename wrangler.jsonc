@@ -1,0 +1,8 @@
+{
+  "name": "gpx-studio-drive",
+  "compatibility_date": "2026-10-19",
+  "assets": {
+    "directory": "./website/build"
+  },
+  "previews": {}
+}

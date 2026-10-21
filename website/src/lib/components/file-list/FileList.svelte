@@ -2,6 +2,7 @@
     import { ScrollArea } from '$lib/components/ui/scroll-area/index';
     import * as ContextMenu from '$lib/components/ui/context-menu';
     import FileListNode from './FileListNode.svelte';
+    import DrivePanel from '$lib/components/DrivePanel.svelte';
     import { onMount, setContext } from 'svelte';
     import { ListFileItem, ListLevel, ListRootItem } from './file-list';
     import { ClipboardPaste, FileStack, Plus } from '@lucide/svelte';
@@ -55,6 +56,9 @@
         {style}
     >
         <FileListNode node={$fileStateCollection} item={new ListRootItem()} />
+        {#if orientation === 'vertical'}
+            <DrivePanel />
+        {/if}
         {#if orientation === 'vertical'}
             <ContextMenu.Root>
                 <ContextMenu.Trigger class="grow" />

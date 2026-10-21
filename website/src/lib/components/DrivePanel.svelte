@@ -1,16 +1,16 @@
 <script lang="ts">
-    
+    import { env } from '$env/dynamic/public';
     import { DriveClient, type DriveGPXFile } from '$lib/drive/client';
     import { loadFiles } from '$lib/logic/file-actions';
 
-    const drive = new DriveClient(import.meta.env.PUBLIC_GOOGLE_CLIENT_ID || '');
+    const drive = new DriveClient(env.PUBLIC_GOOGLE_CLIENT_ID || '');
     let connected = $state(false);
     let busy = $state(false);
     let error = $state('');
     let status = $state('');
     let files = $state<DriveGPXFile[]>([]);
     let expanded = $state(false);
-    let uploadInput: HTMLInputElement;
+    let uploadInput = $state<HTMLInputElement>();
 
     async function action(operation: () => Promise<void>) {
         busy = true; error = ''; status = '';

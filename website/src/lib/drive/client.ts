@@ -100,6 +100,28 @@ export class DriveClient {
         return files;
     }
 
+    async getMetadata(fileId: string): Promise<DriveGPXFile> {
+        const response = await this.request(`${API}/${encodeURIComponent(fileId)}?fields=id,name,modifiedTime`);
+        return await response.json() as DriveGPXFile;
+    }
+
+    async update(file: DriveGPXFile, gpx: string): Promise<DriveGPXFile> {
+        const remote = await this.getMetadata(file.id);
+        if (file.modifiedTime && remote.modifiedTime !== file.modifiedTime) {
+            throw new Error('Conflict: this GPX was modified in Google Drive. Refresh and review changes before saving.');
+        }
+        const doc = new DOMParser().parseFromString(gpx, 'application/xml');
+        if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'gpx') {
+            throw new Error('Cannot save invalid GPX XML');
+        }
+        if (new Blob([gpx]).size > 30 * 1024 * 1024) throw new Error('GPX exceeds 30 MB limit');
+        const response = await this.request(
+            `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(file.id)}?uploadType=media&fields=id,name,modifiedTime`,
+            { method: 'PATCH', headers: { 'Content-Type': 'application/gpx+xml' }, body: gpx }
+        );
+        return await response.json() as DriveGPXFile;
+    }
+
     async download(file: DriveGPXFile): Promise<File> {
         const response = await this.request(`${API}/${encodeURIComponent(file.id)}?alt=media`);
         const content = await response.blob();

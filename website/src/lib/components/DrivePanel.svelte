@@ -5,7 +5,6 @@
     import { selection } from '$lib/logic/selection';
     import { boundsManager } from '$lib/logic/bounds';
     import { buildGPX } from 'gpx';
-    import { get } from 'svelte/store';
 
     const drive = new DriveClient('1029721603429-0h1hv3datbk3guc18kq8ta2od0gevqi4.apps.googleusercontent.com');
     let connected = $state(false);

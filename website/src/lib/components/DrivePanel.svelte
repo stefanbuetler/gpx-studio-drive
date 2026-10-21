@@ -1,9 +1,8 @@
 <script lang="ts">
-    import { PUBLIC_GOOGLE_CLIENT_ID } from '$env/static/public';
     import { DriveClient, type DriveGPXFile } from '$lib/drive/client';
     import { loadFiles } from '$lib/logic/file-actions';
 
-    const drive = new DriveClient(PUBLIC_GOOGLE_CLIENT_ID);
+    const drive = new DriveClient('1029721603429-0h1hv3datbk3guc18kq8ta2od0gevqi4.apps.googleusercontent.com');
     let connected = $state(false);
     let busy = $state(false);
     let error = $state('');

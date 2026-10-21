@@ -5,7 +5,6 @@
     import GPXStatistics from '$lib/components/GPXStatistics.svelte';
     import Map from '$lib/components/map/Map.svelte';
     import Menu from '$lib/components/Menu.svelte';
-    import DrivePanel from '$lib/components/DrivePanel.svelte';
     import Toolbar from '$lib/components/toolbar/Toolbar.svelte';
     import StreetViewControl from '$lib/components/map/street-view-control/StreetViewControl.svelte';
     import LayerControl from '$lib/components/map/layer-control/LayerControl.svelte';
@@ -107,7 +106,6 @@
     <div class="flex flex-col grow h-full min-w-0">
         <div class="grow relative">
             <Menu />
-            <DrivePanel />
             <div
                 class="absolute top-0 bottom-0 left-0 z-20 flex flex-col justify-center pointer-events-none"
             >

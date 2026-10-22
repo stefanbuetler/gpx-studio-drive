@@ -10,8 +10,15 @@ export interface ShareDatabase {
 export interface ShareEnv {
     SHARE_LINKS?: ShareDatabase;
     GOOGLE_CLIENT_ID?: string;
+    GOOGLE_PUBLIC_API_KEY?: string;
 }
-type PublicRoute = { id: string; resourceKey?: string; view: Record<string, unknown> };
+type Preview = { title: string; description: string; image: string };
+type PublicRoute = {
+    id: string;
+    resourceKey?: string;
+    view: Record<string, unknown>;
+    preview?: Preview;
+};
 const CLIENT_ID = '1029721603429-0h1hv3datbk3guc18kq8ta2od0gevqi4.apps.googleusercontent.com';
 const ID = /^[a-zA-Z0-9_-]{1,200}$/;
 const CODE = /^[a-zA-Z0-9_-]{16}$/;
@@ -60,7 +67,32 @@ function parseRoute(value: unknown): PublicRoute {
     const view = Object.fromEntries(
         Object.entries(input.view).filter(([key]) => VIEW_KEYS.has(key))
     );
-    return { id: input.id, ...(input.resourceKey ? { resourceKey: input.resourceKey } : {}), view };
+    if (JSON.stringify(view).length > 65536) throw new Error('Settings too large.');
+    let preview: Preview | undefined;
+    if (input.preview !== undefined) {
+        const p = input.preview;
+        if (
+            typeof p.title !== 'string' ||
+            !p.title.trim() ||
+            p.title.length > 160 ||
+            typeof p.description !== 'string' ||
+            p.description.length > 300 ||
+            typeof p.image !== 'string' ||
+            p.image.length > 750000 ||
+            !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(p.image)
+        )
+            throw new Error('Invalid route image.');
+        const bytes = atob(p.image.slice('data:image/jpeg;base64,'.length));
+        if (!bytes.startsWith('\xff\xd8\xff') || !bytes.endsWith('\xff\xd9'))
+            throw new Error('Invalid JPEG.');
+        preview = { title: p.title, description: p.description, image: p.image };
+    }
+    return {
+        id: input.id,
+        ...(input.resourceKey ? { resourceKey: input.resourceKey } : {}),
+        view,
+        ...(preview ? { preview } : {}),
+    };
 }
 export function routeTarget(origin: string, route: PublicRoute, embed: boolean) {
     const target = new URL(embed ? '/embed' : '/share', origin);
@@ -83,7 +115,7 @@ export function routeTarget(origin: string, route: PublicRoute, embed: boolean) 
     return target.href;
 }
 async function boundedBody(request: Request) {
-    if (Number(request.headers.get('Content-Length')) > 65536)
+    if (Number(request.headers.get('Content-Length')) > 850000)
         throw new Error('Settings too large.');
     const reader = request.body?.getReader();
     if (!reader) throw new Error('Missing settings.');
@@ -94,7 +126,7 @@ async function boundedBody(request: Request) {
             const { value, done } = await reader.read();
             if (done) break;
             size += value.byteLength;
-            if (size > 65536) {
+            if (size > 850000) {
                 await reader.cancel();
                 throw new Error('Settings too large.');
             }
@@ -120,7 +152,8 @@ export async function handleShareLinks(
     if (url.pathname.startsWith('/s/')) {
         if (!['GET', 'HEAD'].includes(request.method))
             return json({ error: 'Method not allowed.' }, 405);
-        const code = url.pathname.slice(3);
+        const imageRequest = url.pathname.endsWith('/image.jpg');
+        const code = url.pathname.slice(3).replace(/\/image\.jpg$/, '');
         if (!CODE.test(code)) return json({ error: 'Link not found.' }, 404);
         if (!env.SHARE_LINKS) return json({ error: 'Short links are unavailable.' }, 503);
         try {
@@ -131,6 +164,44 @@ export async function handleShareLinks(
                 .first<{ route: string }>();
             if (!row) return json({ error: 'Link not found.' }, 404);
             const route = parseRoute(JSON.parse(row.route));
+            if (imageRequest || (route.preview && url.searchParams.get('embed') !== '1')) {
+                if (!route.preview) return json({ error: 'No preview image for this link.' }, 404);
+                if (!env.GOOGLE_PUBLIC_API_KEY)
+                    return json({ error: 'Route preview is unavailable.' }, 503);
+                const params = new URLSearchParams({
+                    key: env.GOOGLE_PUBLIC_API_KEY,
+                    fields: 'id,trashed',
+                    supportsAllDrives: 'true',
+                });
+                const headers = new Headers({ Referer: `${url.origin}/` });
+                if (route.resourceKey)
+                    headers.set('X-Goog-Drive-Resource-Keys', `${route.id}/${route.resourceKey}`);
+                const available = await fetcher(
+                    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(route.id)}?${params}`,
+                    { headers, signal: AbortSignal.timeout(10000) }
+                );
+                if ([401, 403, 404].includes(available.status))
+                    return json({ error: 'This route is no longer public.' }, 404);
+                if (!available.ok)
+                    return json({ error: 'Could not verify this route. Try again.' }, 503);
+                const metadata = (await available.json()) as { trashed?: boolean };
+                if (metadata.trashed)
+                    return json({ error: 'This route is no longer public.' }, 404);
+                if (imageRequest) {
+                    const bytes = Uint8Array.from(atob(route.preview.image.split(',')[1]), (c) =>
+                        c.charCodeAt(0)
+                    );
+                    return new Response(request.method === 'HEAD' ? null : bytes, {
+                        headers: {
+                            'Content-Type': 'image/jpeg',
+                            'Content-Length': String(bytes.length),
+                            'Cache-Control': 'public, max-age=60',
+                            'X-Content-Type-Options': 'nosniff',
+                        },
+                    });
+                }
+                return previewPage(url, route, request.method === 'HEAD');
+            }
             return new Response(null, {
                 status: 302,
                 headers: {
@@ -196,7 +267,7 @@ export async function handleShareLinks(
         if (route.resourceKey)
             headers.set('X-Goog-Drive-Resource-Keys', `${route.id}/${route.resourceKey}`);
         const params = new URLSearchParams({
-            fields: 'id,trashed,isAppAuthorized,appProperties,permissions(type,role)',
+            fields: 'id,name,trashed,isAppAuthorized,appProperties,permissions(type,role)',
             supportsAllDrives: 'true',
         });
         const response = await fetcher(
@@ -206,6 +277,7 @@ export async function handleShareLinks(
         if (!response.ok)
             return cors(json({ error: 'Could not verify the shared GDrive file.' }, 403));
         const file = (await response.json()) as {
+            name?: string;
             trashed?: boolean;
             isAppAuthorized?: boolean;
             appProperties?: Record<string, string>;
@@ -222,6 +294,8 @@ export async function handleShareLinks(
             return cors(
                 json({ error: 'Make the saved route public before creating a short link.' }, 403)
             );
+        if (route.preview && file.name)
+            route.preview.title = file.name.replace(/\.gpx$/i, '').slice(0, 160) || 'Shared route';
         const bytes = crypto.getRandomValues(new Uint8Array(12));
         const code = btoa(String.fromCharCode(...bytes))
             .replaceAll('+', '-')
@@ -242,4 +316,52 @@ export async function handleShareLinks(
             )
         );
     }
+}
+
+function htmlEscape(value: string) {
+    return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+function previewPage(url: URL, route: PublicRoute, head: boolean) {
+    const preview = route.preview!;
+    const canonical = `${url.origin}${url.pathname}`;
+    const image = `${canonical}/image.jpg`;
+    const target = routeTarget(url.origin, route, false);
+    const nonce = crypto.randomUUID();
+    const title = htmlEscape(preview.title);
+    const description = htmlEscape(preview.description);
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>${title} — trail-explorer</title>
+<meta property="og:title" content="${title}">
+<meta property="og:description" content="${description}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="${htmlEscape(canonical)}">
+<meta property="og:site_name" content="trail-explorer">
+<meta property="og:image" content="${htmlEscape(image)}">
+<meta property="og:image:secure_url" content="${htmlEscape(image)}">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Map of ${title}">
+<meta name="description" content="${description}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${title}"><meta name="twitter:description" content="${description}">
+<meta name="twitter:image" content="${htmlEscape(image)}">
+<meta name="robots" content="noindex,nofollow"><meta name="viewport" content="width=device-width,initial-scale=1">
+</head><body><h1>${title}</h1><p>${description}</p><img src="${htmlEscape(image)}" alt="Map of ${title}" width="1200" height="630">
+<p><a href="${htmlEscape(target)}">Open route in trail-explorer</a></p>
+<script nonce="${nonce}">location.replace(${JSON.stringify(target).replaceAll('<', '\\u003c')});</script>
+</body></html>`;
+    return new Response(head ? null : html, {
+        headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+            'Referrer-Policy': 'no-referrer',
+            'Content-Security-Policy': `default-src 'none'; img-src 'self'; script-src 'nonce-${nonce}'; base-uri 'none'`,
+        },
+    });
 }

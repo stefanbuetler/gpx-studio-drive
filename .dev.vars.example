@@ -4,3 +4,6 @@ GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_OAUTH_CLIENT_SECRET
 # Generate with: node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))"
 DRIVE_SESSION_SECRET=YOUR_64_HEX_CHARACTER_SESSION_KEY
 DRIVE_ALLOWED_ORIGINS=http://localhost:5173,https://feature-google-drive-integration-gpx-studio-drive.stefan-buetler.workers.dev
+
+# Same public Drive API key as website PUBLIC_GOOGLE_API_KEY, for preview access checks.
+GOOGLE_PUBLIC_API_KEY=

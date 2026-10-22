@@ -34,6 +34,11 @@ export class MapLibreGLMap {
         return this._mapStore.subscribe(run, invalidate);
     }
 
+    async previewStyle(basemap: string) {
+        if (!this._styleManager) throw new Error('Map is not ready.');
+        return structuredClone(await this._styleManager.buildStyle(basemap));
+    }
+
     init(
         maptilerKey: string,
         language: string,

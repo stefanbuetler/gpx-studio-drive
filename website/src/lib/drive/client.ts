@@ -651,13 +651,18 @@ export class DriveClient {
         );
     }
 
-    async createShortShare(file: DriveGPXFile, view: unknown, publicURL: string): Promise<string> {
+    async createShortShare(
+        file: DriveGPXFile,
+        view: unknown,
+        publicURL: string,
+        preview?: import('./route-preview').RoutePreview
+    ): Promise<string> {
         const endpoint = new URL('/api/share', publicURL);
         const response = await this.request(endpoint.href, {
             method: 'POST',
             credentials: 'omit',
             headers: { 'Content-Type': 'application/json', 'X-GPX-Share-Request': '1' },
-            body: JSON.stringify({ id: file.id, resourceKey: file.resourceKey, view }),
+            body: JSON.stringify({ id: file.id, resourceKey: file.resourceKey, view, preview }),
         });
         const result = (await response.json()) as { url?: string };
         const link = new URL(result.url || '', endpoint);

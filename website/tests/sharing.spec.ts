@@ -45,7 +45,12 @@ async function mockPublic(page: Page, status = 200) {
 
 async function owner(page: Page, publicAlready = false, permissionStatus = 200) {
     const permissions: unknown[] = [];
-    const shortRequests: { id: string; resourceKey?: string; view: Record<string, unknown> }[] = [];
+    const shortRequests: {
+        id: string;
+        resourceKey?: string;
+        view: Record<string, unknown>;
+        preview?: { title: string; description: string; image: string };
+    }[] = [];
     await page.route('**/api/share', async (route) => {
         if (route.request().method() === 'POST') shortRequests.push(route.request().postDataJSON());
         await route.fulfill({
@@ -57,6 +62,12 @@ async function owner(page: Page, publicAlready = false, permissionStatus = 200) 
             },
         });
     });
+    await page.route('**/s/abcdefghijklmnop/image.jpg', (route) =>
+        route.fulfill({
+            contentType: 'image/jpeg',
+            body: Buffer.from(shortRequests[0]?.preview?.image.split(',')[1] || '', 'base64'),
+        })
+    );
     const reads = await mockPublic(page);
     await page.route('https://accounts.google.com/gsi/client', (route) =>
         route.fulfill({
@@ -124,12 +135,12 @@ async function owner(page: Page, publicAlready = false, permissionStatus = 200) 
 test('sharing requires confirmation and produces a public viewer URL without tokens or API keys', async ({
     page,
 }) => {
-    const { dialog, permissions, reads } = await owner(page);
+    const { dialog, permissions, reads, shortRequests } = await owner(page);
     await expect(dialog).toContainText('Anyone with this link');
     expect(permissions).toHaveLength(0);
     await dialog.getByRole('button', { name: 'Make public and create link' }).click();
     const input = dialog.getByRole('textbox', { name: 'Public route link' });
-    await expect(input).toBeVisible();
+    await expect(input).toBeVisible({ timeout: 25000 });
     const url = new URL(await input.inputValue());
     expect(url.protocol).toBe('https:');
     expect(url.hostname).not.toBe('localhost');
@@ -137,6 +148,22 @@ test('sharing requires confirmation and produces a public viewer URL without tok
     expect(url.search).toBe('');
     expect(url.searchParams.has('key')).toBe(false);
     expect(url.href).not.toContain('owner-token');
+    const preview = shortRequests[0].preview!;
+    await (
+        await import('node:fs/promises')
+    ).writeFile(
+        test.info().outputPath('route-preview.jpg'),
+        Buffer.from(preview.image.split(',')[1], 'base64')
+    );
+    expect(preview.title).toBe('Shared alpine route');
+    expect(preview.image).toMatch(/^data:image\/jpeg;base64,/);
+    const image = dialog.getByRole('img', { name: 'Preview map of Shared alpine route.gpx' });
+    await expect(image).toBeVisible();
+    await test.info().attach('route-preview', {
+        body: Buffer.from(preview.image.split(',')[1], 'base64'),
+        contentType: 'image/jpeg',
+    });
+
     expect(permissions).toEqual([{ type: 'anyone', role: 'reader', allowFileDiscovery: false }]);
     expect(reads).toEqual([{ authorization: undefined, resourceKey: 'share-test/resource-key' }]);
 });
@@ -223,7 +250,7 @@ test('share link and embed code snapshot the current editor presentation', async
     });
     await dialog.getByRole('button', { name: 'Make public and create link' }).click();
     const input = dialog.getByRole('textbox', { name: 'Public route link' });
-    await expect(input).toBeVisible();
+    await expect(input).toBeVisible({ timeout: 25000 });
     const url = new URL(await input.inputValue());
     const view = shortRequests[0].view;
     expect(view).toMatchObject({

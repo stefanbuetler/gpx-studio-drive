@@ -136,3 +136,71 @@ test('unknown short codes return 404 and unavailable storage returns 503', async
         503
     );
 });
+
+test('route previews expose crawler-readable metadata and a public JPEG without tokens or API keys', async () => {
+    const { db, fetcher } = setup();
+    const preview = {
+        title: 'Alpine <route>',
+        description: '10.0 km · 500 m ascent',
+        image: 'data:image/jpeg;base64,/9j/2Q==',
+    };
+    const env = { SHARE_LINKS: db, GOOGLE_PUBLIC_API_KEY: 'public-test-key' };
+    const created = await handleShareLinks(create({ id: 'route', view, preview }), env, fetcher);
+    assert.equal(created.status, 201);
+    const { url } = (await created.json()) as { url: string };
+    const page = await handleShareLinks(new Request(url), env, fetcher);
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.match(html, /og:title" content="Alpine &lt;route&gt;"/);
+    assert.ok(html.includes(`<meta property="og:image" content="${url}/image.jpg">`));
+    assert.match(html, /og:image:width" content="1200"/);
+    assert.match(html, /location.replace\(/);
+    assert.ok(!html.includes('public-test-key'));
+    assert.ok(!html.includes('test-token'));
+    const image = await handleShareLinks(new Request(url + '/image.jpg'), env, fetcher);
+    assert.equal(image.status, 200);
+    assert.equal(image.headers.get('Content-Type'), 'image/jpeg');
+    assert.equal((await image.arrayBuffer()).byteLength, 4);
+    const embed = await handleShareLinks(new Request(url + '?embed=1'), env, fetcher);
+    assert.equal(embed.status, 302);
+    assert.equal(new URL(embed.headers.get('Location')!).pathname, '/embed');
+});
+test('revoking public GDrive access hides stored previews and metadata', async () => {
+    const { db, fetcher } = setup();
+    const env = { SHARE_LINKS: db, GOOGLE_PUBLIC_API_KEY: 'test-key' };
+    const created = await handleShareLinks(
+        create({
+            id: 'route',
+            view,
+            preview: {
+                title: 'Private title',
+                description: 'route',
+                image: 'data:image/jpeg;base64,/9j/2Q==',
+            },
+        }),
+        env,
+        fetcher
+    );
+    const { url } = (await created.json()) as { url: string };
+    const revoked: typeof fetch = async () => new Response(null, { status: 403 });
+    for (const link of [url, url + '/image.jpg']) {
+        const result = await handleShareLinks(new Request(link), env, revoked);
+        assert.equal(result.status, 404);
+        assert.ok(!(await result.text()).includes('Private title'));
+    }
+});
+test('rejects non-JPEG or oversized thumbnail data before writing', async () => {
+    const { db, fetcher, rows } = setup();
+    for (const image of [
+        'data:image/svg+xml;base64,abc',
+        'data:image/jpeg;base64,' + 'A'.repeat(750001),
+    ]) {
+        const response = await handleShareLinks(
+            create({ id: 'route', view, preview: { title: 'Route', description: 'route', image } }),
+            { SHARE_LINKS: db },
+            fetcher
+        );
+        assert.equal(response.status, 400);
+    }
+    assert.equal(rows.size, 0);
+});

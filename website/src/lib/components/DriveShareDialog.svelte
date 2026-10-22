@@ -59,17 +59,18 @@
                 signing in. They cannot overwrite your original through the link.
             </p>
             <p class="text-sm text-muted-foreground">
-                Your local route will be saved to your chosen GDrive folder first. Only that saved copy
-                will be shared. Future saves to it will appear at the same link.
+                Your local route will be saved to your chosen GDrive folder first. Only that saved
+                copy will be shared. Future saves to it will appear at the same link.
             </p>
             <p class="text-sm text-muted-foreground">
                 The link and embed will use your current map layer, overlays, markers, units, theme,
                 and elevation display. The route will be centered automatically. Custom map layer
-                URLs are included, so use public tile sources.
+                URLs are included, so use public tile sources. A route image is included in
+                messaging previews.
             </p>
             <p class="text-sm text-muted-foreground">
-                You can turn off link sharing in GDrive. Downloaded copies remain with their
-                recipients.
+                You can turn off link sharing in GDrive. Downloaded copies and cached messaging
+                previews may remain with their recipients.
             </p>
             <Dialog.Footer>
                 <Button variant="outline" disabled={busy} onclick={() => (open = false)}
@@ -80,6 +81,11 @@
                 >
             </Dialog.Footer>
         {:else}
+            <img
+                src="{link}/image.jpg"
+                alt="Preview map of {file.name}"
+                class="w-full rounded-md border aspect-[1200/630] object-cover"
+            />
             <label class="text-sm font-medium" for="public-route-link">Public route link</label>
             <input
                 id="public-route-link"

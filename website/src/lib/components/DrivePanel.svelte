@@ -8,6 +8,7 @@
         driveBatchActions,
     } from '$lib/drive/browser';
     import { toast } from 'svelte-sonner';
+    import { createRoutePreview } from '$lib/drive/route-preview';
     import { captureSharedView } from '$lib/drive/sharing';
     import { Button } from '$lib/components/ui/button';
     import { Cloud, LogIn, FileText, ChevronRight, Check, RefreshCw, Search } from '@lucide/svelte';
@@ -492,9 +493,17 @@
             const key = savedRouteKey(account, shareLocalId, identity);
             const previous = await readSavedRoute(key);
             if (previous) await writeSavedRoute({ ...previous, remote: $state.snapshot(shared) });
-            await downloadPublicGPX(publicDriveURL(shared.id, shared.resourceKey));
+            const publicGPX = await downloadPublicGPX(
+                publicDriveURL(shared.id, shared.resourceKey)
+            );
             verified = true;
-            const link = await drive.createShortShare(shared, view, publicViewerURL(shared, view));
+            const preview = await createRoutePreview(publicGPX, shared.name, view);
+            const link = await drive.createShortShare(
+                shared,
+                view,
+                publicViewerURL(shared, view),
+                preview
+            );
             status = `Public link ready for ${shared.name}`;
             return link;
         } catch (e) {

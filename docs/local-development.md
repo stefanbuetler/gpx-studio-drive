@@ -113,3 +113,9 @@ The toolbar shows the connected Google user's name, with their email in the tool
 **File → Save to GDrive** saves the file containing the current selection. It is disabled when no file or multiple files are selected. **File → Save all to GDrive** saves all local working copies. Both work with the right-hand file tree hidden and leave working copies open. Existing export commands keep their download shortcuts.
 
 Delete and Delete all remove local content only. Both show an Undo action after the operation completes, as do context-menu and keyboard deletions. Existing saved GDrive files remain untouched.
+
+## Short public links
+
+Sharing creates a random `/s/<code>` URL backed by the feature preview’s Cloudflare D1 database. The record contains only the public GDrive file ID, resource key, and presentation settings. It never stores OAuth tokens or GPX content. The same code with `?embed=1` opens the centered embed. Existing long links still work.
+
+Creation requires this app’s Google access token and an already-public app-managed route. Links continue to read the live GDrive file, so making that file private prevents public viewing. Local development uses the configured `PUBLIC_APP_URL` preview service. Production requires its own `SHARE_LINKS` binding and the schema in `worker/migrations/0001_share_links.sql`; the current binding is preview-only.

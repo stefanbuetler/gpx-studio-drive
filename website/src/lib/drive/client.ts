@@ -651,6 +651,26 @@ export class DriveClient {
         );
     }
 
+    async createShortShare(file: DriveGPXFile, view: unknown, publicURL: string): Promise<string> {
+        const endpoint = new URL('/api/share', publicURL);
+        const response = await this.request(endpoint.href, {
+            method: 'POST',
+            credentials: 'omit',
+            headers: { 'Content-Type': 'application/json', 'X-GPX-Share-Request': '1' },
+            body: JSON.stringify({ id: file.id, resourceKey: file.resourceKey, view }),
+        });
+        const result = (await response.json()) as { url?: string };
+        const link = new URL(result.url || '', endpoint);
+        if (
+            link.origin !== endpoint.origin ||
+            !/^\/s\/[a-zA-Z0-9_-]{16}$/.test(link.pathname) ||
+            link.search ||
+            link.hash
+        )
+            throw new Error('The short link service returned an invalid link.');
+        return link.href;
+    }
+
     async listFolders(parentId: string, pageToken?: string) {
         const parent = parentId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         const params = new URLSearchParams({

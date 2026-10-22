@@ -45,6 +45,18 @@ async function mockPublic(page: Page, status = 200) {
 
 async function owner(page: Page, publicAlready = false, permissionStatus = 200) {
     const permissions: unknown[] = [];
+    const shortRequests: { id: string; resourceKey?: string; view: Record<string, unknown> }[] = [];
+    await page.route('**/api/share', async (route) => {
+        if (route.request().method() === 'POST') shortRequests.push(route.request().postDataJSON());
+        await route.fulfill({
+            json: { url: new URL('/s/abcdefghijklmnop', route.request().url()).href },
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-GPX-Share-Request',
+                'Access-Control-Allow-Methods': 'POST',
+            },
+        });
+    });
     const reads = await mockPublic(page);
     await page.route('https://accounts.google.com/gsi/client', (route) =>
         route.fulfill({
@@ -101,7 +113,12 @@ async function owner(page: Page, publicAlready = false, permissionStatus = 200) 
         .last()
         .click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Share route', exact: true }).click();
-    return { dialog: page.getByRole('dialog', { name: 'Share route' }), permissions, reads };
+    return {
+        dialog: page.getByRole('dialog', { name: 'Share route' }),
+        permissions,
+        reads,
+        shortRequests,
+    };
 }
 
 test('sharing requires confirmation and produces a public viewer URL without tokens or API keys', async ({
@@ -116,9 +133,8 @@ test('sharing requires confirmation and produces a public viewer URL without tok
     const url = new URL(await input.inputValue());
     expect(url.protocol).toBe('https:');
     expect(url.hostname).not.toBe('localhost');
-    expect(url.pathname).toBe('/share');
-    expect(url.searchParams.get('id')).toBe('share-test');
-    expect(url.searchParams.get('resourcekey')).toBe('resource-key');
+    expect(url.pathname).toBe('/s/abcdefghijklmnop');
+    expect(url.search).toBe('');
     expect(url.searchParams.has('key')).toBe(false);
     expect(url.href).not.toContain('owner-token');
     expect(permissions).toEqual([{ type: 'anyone', role: 'reader', allowFileDiscovery: false }]);
@@ -180,7 +196,7 @@ test('invalid share link is rejected before fetching Drive', async ({ page }) =>
 });
 
 test('share link and embed code snapshot the current editor presentation', async ({ page }) => {
-    const { dialog } = await owner(page, true);
+    const { dialog, shortRequests } = await owner(page, true);
     await page.evaluate(async () => {
         const path = '/src/lib/logic/settings.ts';
         const { settings } = await import(/* @vite-ignore */ path);
@@ -209,7 +225,7 @@ test('share link and embed code snapshot the current editor presentation', async
     const input = dialog.getByRole('textbox', { name: 'Public route link' });
     await expect(input).toBeVisible();
     const url = new URL(await input.inputValue());
-    const view = JSON.parse(url.searchParams.get('view')!);
+    const view = shortRequests[0].view;
     expect(view).toMatchObject({
         basemap: 'libertySatellite',
         overlays: { waymarkedTrailsHiking: true },
@@ -225,15 +241,11 @@ test('share link and embed code snapshot the current editor presentation', async
     expect(code).toContain('<iframe');
     expect(code).toContain('width="100%"');
     const embedURL = new URL(code.match(/src="([^"]+)"/)![1].replaceAll('&amp;', '&'));
-    expect(embedURL.pathname).toBe('/embed');
-    expect(embedURL.searchParams.get('fit')).toBe('route');
+    expect(embedURL.pathname).toBe('/s/abcdefghijklmnop');
+    expect(embedURL.searchParams.get('embed')).toBe('1');
     expect(embedURL.hash).toBe('');
     expect(url.hash).toBe('');
-    expect(JSON.parse(embedURL.searchParams.get('options')!)).toMatchObject({
-        ...view,
-        ids: ['share-test'],
-        resourceKeys: { 'share-test': 'resource-key' },
-    });
+    expect(shortRequests[0]).toMatchObject({ id: 'share-test', resourceKey: 'resource-key', view });
     expect(code).not.toContain('owner-token');
 });
 

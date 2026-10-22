@@ -122,6 +122,12 @@ export function applySharedLayers(options: EmbeddingOptions) {
 
 export function embedURLFromShare(link: string): string {
     const url = new URL(link);
+    if (/^\/s\/[a-zA-Z0-9_-]{16}$/.test(url.pathname)) {
+        url.search = '';
+        url.hash = '';
+        url.searchParams.set('embed', '1');
+        return url.href;
+    }
     const id = url.searchParams.get('id')!;
     const resourceKey = url.searchParams.get('resourcekey');
     const view = JSON.parse(url.searchParams.get('view') || '{}');

@@ -481,6 +481,7 @@
         error = '';
         status = '';
         let enabled = false;
+        let verified = false;
         try {
             const saved = await saveLocalToDrive(shareLocalId);
             const shared = await drive.makePublic(saved);
@@ -492,9 +493,15 @@
             const previous = await readSavedRoute(key);
             if (previous) await writeSavedRoute({ ...previous, remote: $state.snapshot(shared) });
             await downloadPublicGPX(publicDriveURL(shared.id, shared.resourceKey));
+            verified = true;
+            const link = await drive.createShortShare(shared, view, publicViewerURL(shared, view));
             status = `Public link ready for ${shared.name}`;
-            return publicViewerURL(shared, view);
+            return link;
         } catch (e) {
+            if (enabled && verified)
+                throw new Error(
+                    'Your saved route is public, but the short link could not be created. Try again.'
+                );
             if (enabled)
                 throw new Error(
                     'GDrive link sharing is enabled, but public viewing could not be verified. Check the public API key and website restrictions, then try again.'

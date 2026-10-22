@@ -59,7 +59,7 @@
                 signing in. They cannot overwrite your original through the link.
             </p>
             <p class="text-sm text-muted-foreground">
-                Your local route will be saved to the GPX Files folder first. Only that saved copy
+                Your local route will be saved to your chosen GDrive folder first. Only that saved copy
                 will be shared. Future saves to it will appear at the same link.
             </p>
             <p class="text-sm text-muted-foreground">

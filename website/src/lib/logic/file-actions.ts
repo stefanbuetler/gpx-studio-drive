@@ -32,6 +32,15 @@ import { settings } from '$lib/logic/settings';
 import { getClosestLinePoint, getClosestTrackSegments, getElevation } from '$lib/utils';
 import { gpxStatistics } from '$lib/logic/statistics';
 import { boundsManager } from './bounds';
+import { getGPXName } from './file-name';
+import { toast } from 'svelte-sonner';
+
+function notifyDeleteUndo(message: string) {
+    toast.success(message, {
+        description: 'Removed from this browser only. Saved GDrive files are unchanged.',
+        action: { label: 'Undo', onClick: () => fileActionManager.undo() },
+    });
+}
 
 // Generate unique file ids, different from the ones in the database
 export function getFileIds(n: number) {
@@ -111,9 +120,7 @@ export async function loadFile(file: File): Promise<GPXFile | null> {
                 if (gpx.metadata === undefined) {
                     gpx.metadata = {};
                 }
-                if (gpx.metadata.name === undefined || gpx.metadata.name.trim() === '') {
-                    gpx.metadata.name = file.name.split('.').slice(0, -1).join('.');
-                }
+                gpx.metadata.name = getGPXName(gpx, file.name);
                 resolve(gpx);
             } else {
                 resolve(null);
@@ -157,6 +164,7 @@ export const fileActions = {
                     if (file) {
                         let newFile = file.clone();
                         newFile._data.id = ids[index++];
+                        delete newFile._data.driveIdentity;
                         draft.set(newFile._data.id, freeze(newFile));
                     }
                 } else {
@@ -481,6 +489,7 @@ export const fileActions = {
                                     )
                                 );
                                 newFile._data.id = fileIds[index];
+                                delete newFile._data.driveIdentity;
                                 newFile.metadata.name =
                                     track.name ?? `${file.metadata.name} (${index + 1})`;
                                 draft.set(newFile._data.id, freeze(newFile));
@@ -505,6 +514,7 @@ export const fileActions = {
                                     )
                                 );
                                 newFile._data.id = fileIds[index];
+                                delete newFile._data.driveIdentity;
                                 newFile.metadata.name = `${file.trk[0].name ?? file.metadata.name} (${index + 1})`;
                                 draft.set(newFile._data.id, freeze(newFile));
                             });
@@ -567,6 +577,7 @@ export const fileActions = {
                         newFile.crop(0, absoluteIndex);
                         let newFile2 = file.clone();
                         newFile2._data.id = getFileIds(1)[0];
+                        delete newFile2._data.driveIdentity;
                         newFile2.crop(absoluteIndex, file.getNumberOfTrackPoints() - 1);
                         draft.set(newFile2._data.id, freeze(newFile2));
                     }
@@ -771,41 +782,47 @@ export const fileActions = {
         if (get(selection).size === 0) {
             return;
         }
-        fileActionManager.applyGlobal((draft) => {
-            selection.applyToOrderedSelectedItemsFromFile((fileId, level, items) => {
-                if (level === ListLevel.FILE) {
-                    draft.delete(fileId);
-                } else {
-                    let file = draft.get(fileId);
-                    if (file) {
-                        if (level === ListLevel.TRACK) {
-                            for (let item of items) {
-                                let trackIndex = (item as ListTrackItem).getTrackIndex();
-                                file.replaceTracks(trackIndex, trackIndex, []);
-                            }
-                        } else if (level === ListLevel.SEGMENT) {
-                            for (let item of items) {
-                                let trackIndex = (item as ListTrackSegmentItem).getTrackIndex();
-                                let segmentIndex = (item as ListTrackSegmentItem).getSegmentIndex();
-                                file.replaceTrackSegments(
-                                    trackIndex,
-                                    segmentIndex,
-                                    segmentIndex,
-                                    []
-                                );
-                            }
-                        } else if (level === ListLevel.WAYPOINTS) {
-                            file.replaceWaypoints(0, file.wpt.length - 1, []);
-                        } else if (level === ListLevel.WAYPOINT) {
-                            for (let item of items) {
-                                let waypointIndex = (item as ListWaypointItem).getWaypointIndex();
-                                file.replaceWaypoints(waypointIndex, waypointIndex, []);
+        return fileActionManager
+            .applyGlobal((draft) => {
+                selection.applyToOrderedSelectedItemsFromFile((fileId, level, items) => {
+                    if (level === ListLevel.FILE) {
+                        draft.delete(fileId);
+                    } else {
+                        let file = draft.get(fileId);
+                        if (file) {
+                            if (level === ListLevel.TRACK) {
+                                for (let item of items) {
+                                    let trackIndex = (item as ListTrackItem).getTrackIndex();
+                                    file.replaceTracks(trackIndex, trackIndex, []);
+                                }
+                            } else if (level === ListLevel.SEGMENT) {
+                                for (let item of items) {
+                                    let trackIndex = (item as ListTrackSegmentItem).getTrackIndex();
+                                    let segmentIndex = (
+                                        item as ListTrackSegmentItem
+                                    ).getSegmentIndex();
+                                    file.replaceTrackSegments(
+                                        trackIndex,
+                                        segmentIndex,
+                                        segmentIndex,
+                                        []
+                                    );
+                                }
+                            } else if (level === ListLevel.WAYPOINTS) {
+                                file.replaceWaypoints(0, file.wpt.length - 1, []);
+                            } else if (level === ListLevel.WAYPOINT) {
+                                for (let item of items) {
+                                    let waypointIndex = (
+                                        item as ListWaypointItem
+                                    ).getWaypointIndex();
+                                    file.replaceWaypoints(waypointIndex, waypointIndex, []);
+                                }
                             }
                         }
                     }
-                }
-            });
-        });
+                });
+            })
+            .then(() => notifyDeleteUndo('Deleted selection'));
     },
     addElevationToSelection: async () => {
         if (get(selection).size === 0) {
@@ -879,16 +896,24 @@ export const fileActions = {
         if (get(selection).size === 0) {
             return;
         }
-        fileActionManager.applyGlobal((draft) => {
-            selection.applyToOrderedSelectedItemsFromFile((fileId, level, items) => {
-                draft.delete(fileId);
-            });
-        });
+        return fileActionManager
+            .applyGlobal((draft) => {
+                selection.applyToOrderedSelectedItemsFromFile((fileId, level, items) => {
+                    draft.delete(fileId);
+                });
+            })
+            .then(() => notifyDeleteUndo('Deleted selected files'));
     },
-    deleteAllFiles: () => {
+    closeFiles: (ids: string[]) =>
         fileActionManager.applyGlobal((draft) => {
-            draft.clear();
-        });
+            ids.forEach((id) => draft.delete(id));
+        }),
+    deleteAllFiles: () => {
+        return fileActionManager
+            .applyGlobal((draft) => {
+                draft.clear();
+            })
+            .then(() => notifyDeleteUndo('Deleted all local files'));
     },
 };
 
@@ -1109,6 +1134,8 @@ export function moveItems(
                         if (remove) {
                             files.delete(newFile._data.id);
                         }
+                        if (!remove || newFile._data.id !== item.getFileId())
+                            delete newFile._data.driveIdentity;
                         newFile._data.id = item.getFileId();
                         files.set(item.getFileId(), freeze(newFile));
                     } else if (context[i] instanceof Track) {

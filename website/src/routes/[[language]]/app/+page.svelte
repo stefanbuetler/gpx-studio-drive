@@ -1,4 +1,5 @@
 <script lang="ts">
+    import DrivePanel from '$lib/components/DrivePanel.svelte';
     import GPXLayers from '$lib/components/map/gpx-layer/GPXLayers.svelte';
     import ElevationProfile from '$lib/components/elevation-profile/ElevationProfile.svelte';
     import FileList from '$lib/components/file-list/FileList.svelte';
@@ -17,6 +18,8 @@
     import { onDestroy, onMount } from 'svelte';
     import { page } from '$app/state';
     import { gpxStatistics, hoveredPoint, slicedGPXStatistics } from '$lib/logic/statistics';
+    import { downloadPublicGPX } from '$lib/drive/public';
+    import { toast } from 'svelte-sonner';
     import { getURLForGoogleDriveFile } from '$lib/components/embedding/embedding';
     import { db } from '$lib/db';
     import { fileStateCollection } from '$lib/logic/file-state';
@@ -37,24 +40,21 @@
 
     onMount(async () => {
         settings.connectToDatabase(db);
-        fileStateCollection.connectToDatabase(db).then(() => {
-            let files: string[] = JSON.parse(page.url.searchParams.get('files') || '[]');
-            let ids: string[] = JSON.parse(page.url.searchParams.get('ids') || '[]');
-            let urls: string[] = files.concat(ids.map(getURLForGoogleDriveFile));
-
-            if (urls.length > 0) {
-                let downloads: Promise<File | null>[] = [];
-                urls.forEach((url) => {
-                    downloads.push(
-                        fetch(url)
-                            .then((response) => response.blob())
-                            .then((blob) => new File([blob], url.split('/').pop() ?? ''))
-                    );
-                });
-
-                Promise.all(downloads).then((files) => {
-                    loadFiles(files.filter((file) => file !== null));
-                });
+        fileStateCollection.connectToDatabase(db).then(async () => {
+            try {
+                const files: string[] = JSON.parse(page.url.searchParams.get('files') || '[]');
+                const ids: string[] = JSON.parse(page.url.searchParams.get('ids') || '[]');
+                const resourceKeys: Record<string, string> = JSON.parse(
+                    page.url.searchParams.get('resourceKeys') || '{}'
+                );
+                const urls = files.concat(
+                    ids.map((id) => getURLForGoogleDriveFile(id, resourceKeys[id]))
+                );
+                if (urls.length) await loadFiles(await Promise.all(urls.map(downloadPublicGPX)));
+            } catch (error) {
+                toast.error(
+                    error instanceof Error ? error.message : 'Could not open the shared route.'
+                );
             }
         });
     });
@@ -64,6 +64,8 @@
         fileStateCollection.disconnectFromDatabase();
     });
 </script>
+
+<DrivePanel />
 
 <div class="fixed mt-[100%] -z-10 text-transparent">
     <h1>{i18n._('metadata.home_title')} — {i18n._('metadata.app_title')}</h1>

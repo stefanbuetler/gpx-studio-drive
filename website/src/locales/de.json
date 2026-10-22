@@ -538,7 +538,7 @@
         "title": "Erstelle deine eigene Karte!",
         "maptiler_key": "MapTiler-Schlüssel (optional, nur für MapTiler-Karten erforderlich)",
         "file_urls": "Datei URLs (getrennt durch Kommas)",
-        "drive_ids": "Google Drive Datei IDs (getrennt durch Kommas)",
+        "drive_ids": "GDrive Datei IDs (getrennt durch Kommas)",
         "basemap": "Basiskarte",
         "height": "Höhe",
         "fill_by": "Füllen durch",

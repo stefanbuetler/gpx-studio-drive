@@ -796,7 +796,7 @@ export const defaultOpacities: { [key: string]: number } = {
 export type LayerTreeType = { [key: string]: LayerTreeType | boolean };
 
 // Hierarchy containing all basemaps
-export const basemapTree: LayerTreeType = {
+export const basemapTree: Record<string, LayerTreeType> = {
     basemaps: {
         world: {
             libertyTopo: true,
@@ -853,7 +853,7 @@ export const basemapTree: LayerTreeType = {
 };
 
 // Hierarchy containing all overlays
-export const overlayTree: LayerTreeType = {
+export const overlayTree: Record<string, LayerTreeType> = {
     overlays: {
         world: {
             waymarked_trails: {

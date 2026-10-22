@@ -538,7 +538,7 @@
         "title": "Susikurkite savo žemėlapį",
         "maptiler_key": "MapTiler key (optional, only required for MapTiler maps)",
         "file_urls": "Failų URL adresai (atskirti kableliais)",
-        "drive_ids": "Google Drive file IDs (separated by commas)",
+        "drive_ids": "GDrive file IDs (separated by commas)",
         "basemap": "Pagrindo žemėlapis",
         "height": "Aukštis",
         "fill_by": "Užpildyti (kuo)",

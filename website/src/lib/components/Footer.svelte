@@ -11,7 +11,8 @@
 <footer class="w-full px-12 py-10 border-t flex flex-col items-center">
     <div class="w-full max-w-5xl flex flex-row flex-wrap justify-between gap-x-10 gap-y-6">
         <div class="grow flex flex-col items-start">
-            <Logo class="h-8" width="153" />
+            <Logo class="h-8" width="192" />
+            <span class="text-xs text-muted-foreground">A fork of gpx.studio</span>
             <Button
                 variant="link"
                 class="h-6 px-0 has-[>svg]:px-0 text-muted-foreground"

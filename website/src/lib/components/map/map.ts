@@ -1,3 +1,4 @@
+import { serviceURL } from '$lib/service-url';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
@@ -45,6 +46,7 @@ export class MapLibreGLMap {
         this._styleManager = new StyleManager(this._mapStore, this._maptilerKey);
         const map = new maplibregl.Map({
             container: 'map',
+            transformRequest: (url) => ({ url: serviceURL(url) }),
             style: {
                 version: 8,
                 projection: {

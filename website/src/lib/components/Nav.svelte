@@ -13,7 +13,7 @@
             class="shrink-0 translate-y-0.25 justify-self-start"
         >
             <Logo class="h-8 xs:hidden" iconOnly={true} width="26" />
-            <Logo class="h-8 hidden xs:block" width="153" />
+            <Logo class="h-8 hidden xs:block" width="192" />
         </a>
         <Button
             variant="link"

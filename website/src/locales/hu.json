@@ -538,7 +538,7 @@
         "title": "Készítse el saját térképét",
         "maptiler_key": "MapTiler key (optional, only required for MapTiler maps)",
         "file_urls": "Fájl elérési URL-ek (vesszővel elválasztva)",
-        "drive_ids": "Google Drive ID-ik (a fájlazonosítók vesszővel elválasztva)",
+        "drive_ids": "GDrive ID-ik (a fájlazonosítók vesszővel elválasztva)",
         "basemap": "Alap térkép",
         "height": "Magasság",
         "fill_by": "Töltse ki",

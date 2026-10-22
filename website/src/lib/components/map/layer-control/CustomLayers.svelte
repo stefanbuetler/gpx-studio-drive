@@ -18,7 +18,7 @@
         Layers2,
     } from '@lucide/svelte';
     import { i18n } from '$lib/i18n.svelte';
-    import { defaultBasemap, type CustomLayer } from '$lib/assets/layers';
+    import { defaultBasemap, type CustomLayer, type LayerTreeType } from '$lib/assets/layers';
     import { onMount } from 'svelte';
     import { remove } from './utils';
     import { settings } from '$lib/logic/settings';
@@ -255,7 +255,7 @@
                 onfinalize={(e) => {
                     customBasemapItems = e.detail.items;
                     $customBasemapOrder = customBasemapItems.map((item) => item.id);
-                    $selectedBasemapTree.basemaps['custom'] = customBasemapItems.reduce(
+                    ($selectedBasemapTree.basemaps as LayerTreeType)['custom'] = customBasemapItems.reduce<LayerTreeType>(
                         (acc, item) => {
                             acc[item.id] = true;
                             return acc;
@@ -315,7 +315,7 @@
                 onfinalize={(e) => {
                     customOverlayItems = e.detail.items;
                     $customOverlayOrder = customOverlayItems.map((item) => item.id);
-                    $selectedOverlayTree.overlays['custom'] = customOverlayItems.reduce(
+                    ($selectedOverlayTree.overlays as LayerTreeType)['custom'] = customOverlayItems.reduce<LayerTreeType>(
                         (acc, item) => {
                             acc[item.id] = true;
                             return acc;

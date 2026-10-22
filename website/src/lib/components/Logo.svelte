@@ -16,7 +16,7 @@
 {#if company === 'gpx.studio'}
     <img
         src="{base}/{iconOnly ? 'icon' : 'logo'}{mode.current === 'dark' ? '-dark' : ''}.svg"
-        alt="Logo of gpx.studio."
+        alt="trail-explorer"
         {...others}
     />
 {:else if company === 'github'}

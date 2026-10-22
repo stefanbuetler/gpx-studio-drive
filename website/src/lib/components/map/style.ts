@@ -1,3 +1,4 @@
+import { serviceURL } from '$lib/service-url';
 import { settings } from '$lib/logic/settings';
 import { get, type Writable } from 'svelte/store';
 import {
@@ -114,7 +115,7 @@ export class StyleManager {
                 }
             }
         } catch (e) {
-            console.error(e.message);
+            console.error(e instanceof Error ? e.message : e);
         }
         this.merge(style, basemapStyle);
 
@@ -184,7 +185,7 @@ export class StyleManager {
                         }
                         this._pastOverlays.add(overlay);
                     } catch (e) {
-                        console.error(e.message);
+                        console.error(e instanceof Error ? e.message : e);
                     }
                 }
             }
@@ -212,7 +213,7 @@ export class StyleManager {
     async get(styleInfo: StyleSpecification | string): Promise<StyleSpecification> {
         if (typeof styleInfo === 'string') {
             let styleUrl = styleInfo as string;
-            const response = await fetch(styleUrl, { cache: 'force-cache' });
+            const response = await fetch(serviceURL(styleUrl), { cache: 'force-cache' });
             if (!response.ok) {
                 throw new Error(`HTTP error fetching style "${styleInfo}": ${response.status}`);
             }

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { driveLocalActions } from '$lib/drive/browser';
     import { Button } from '$lib/components/ui/button';
     import * as ContextMenu from '$lib/components/ui/context-menu';
     import Shortcut from '$lib/components/Shortcut.svelte';
@@ -17,6 +18,8 @@
         Maximize,
         Scissors,
         FileStack,
+        Save,
+        Share2,
     } from '@lucide/svelte';
     import {
         ListFileItem,
@@ -96,7 +99,11 @@
     );
 
     let hidden = $derived(
-        item.level === ListLevel.WAYPOINTS ? node._data.hiddenWpt : node._data.hidden
+        Array.isArray(node)
+            ? node.every((waypoint) => waypoint._data.hidden)
+            : item.level === ListLevel.WAYPOINTS
+              ? node._data.hiddenWpt
+              : node._data.hidden
     );
 </script>
 
@@ -114,6 +121,10 @@
     <ContextMenu.Trigger class="grow truncate">
         <Button
             variant="ghost"
+            onclick={() => {
+                if (item instanceof ListFileItem && $selection.has(item))
+                    boundsManager.centerMapOnSelection();
+            }}
             class="relative w-full p-0 overflow-hidden border-none focus-visible:ring-0 focus-visible:ring-offset-0 flex flex-row {orientation ===
             'vertical'
                 ? 'h-7'
@@ -211,6 +222,22 @@
         </Button>
     </ContextMenu.Trigger>
     <ContextMenu.Content>
+        {#if !embedding && item instanceof ListFileItem && $driveLocalActions[item.getFileId()]}
+            {@const driveActions = $driveLocalActions[item.getFileId()]}
+            <ContextMenu.Item
+                disabled={driveActions.busy || !driveActions.save}
+                onclick={() => driveActions.save?.()}
+            >
+                <Save size="16" />Save to GDrive
+            </ContextMenu.Item>
+            <ContextMenu.Item
+                disabled={driveActions.busy || !driveActions.share}
+                onclick={() => driveActions.share?.()}
+            >
+                <Share2 size="16" />Share route
+            </ContextMenu.Item>
+            <ContextMenu.Separator />
+        {/if}
         {#if item instanceof ListFileItem || item instanceof ListTrackItem}
             <ContextMenu.Item
                 disabled={!singleSelection}

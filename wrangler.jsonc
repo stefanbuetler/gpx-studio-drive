@@ -1,8 +1,18 @@
 {
   "name": "gpx-studio-drive",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-10-19",
   "assets": {
-    "directory": "./website/build"
+    "directory": "./website/build",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/drive/*"]
   },
-  "previews": {}
+  "vars": {
+    "DRIVE_ALLOWED_ORIGINS": "https://gpx-studio-drive.stefan-buetler.workers.dev"
+  },
+  "previews": {
+    "vars": {
+      "DRIVE_ALLOWED_ORIGINS": "https://feature-google-drive-integration-gpx-studio-drive.stefan-buetler.workers.dev"
+    }
+  }
 }

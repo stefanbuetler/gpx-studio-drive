@@ -88,6 +88,8 @@ export class ElevationProfile {
                 this.updateData();
             });
             velocityUnits.subscribe(() => {
+                const speedScale = this._chart?.options.scales?.yspeed;
+                if (speedScale) speedScale.reverse = get(velocityUnits) === 'pace';
                 this.updateData();
             });
             temperatureUnits.subscribe(() => {
@@ -285,7 +287,7 @@ export class ElevationProfile {
                 grid: {
                     display: false,
                 },
-                reverse: () => id === 'speed' && get(velocityUnits) === 'pace',
+                reverse: id === 'speed' && get(velocityUnits) === 'pace',
                 display: false,
             };
         });

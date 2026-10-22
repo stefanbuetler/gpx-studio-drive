@@ -1,16 +1,27 @@
 <script lang="ts">
+    import {
+        driveBrowserOpen,
+        driveFolderOpen,
+        driveAccount,
+        accountInitials,
+        driveLocalActions,
+        driveBatchActions,
+    } from '$lib/drive/browser';
     import * as Menubar from '$lib/components/ui/menubar/index.js';
     import { Button } from '$lib/components/ui/button';
     import Logo from '$lib/components/Logo.svelte';
     import Shortcut from '$lib/components/Shortcut.svelte';
     import {
+        Cloud,
+        LogOut,
+        Save,
+        SaveAll,
         Plus,
         Copy,
         Download,
         Undo2,
         Redo2,
         Trash2,
-        Heart,
         Map,
         Layers2,
         Box,
@@ -29,7 +40,7 @@
         File,
         View,
         FilePen,
-        HeartHandshake,
+        UserRound,
         PersonStanding,
         Eye,
         EyeOff,
@@ -91,6 +102,18 @@
         routing,
     } = settings;
 
+    let selectedSaveIds = $derived([
+        ...new Set(
+            $selection
+                .getSelected()
+                .map((item) => item.getFileId())
+                .filter((id) => !!$driveLocalActions[id])
+        ),
+    ]);
+    let selectedSave = $derived(
+        selectedSaveIds.length === 1 ? $driveLocalActions[selectedSaveIds[0]] : undefined
+    );
+
     const canUndo = fileActionManager.canUndo;
     const canRedo = fileActionManager.canRedo;
 
@@ -131,8 +154,8 @@
         class="w-fit flex flex-row items-center justify-center p-1 bg-background rounded-b-md md:rounded-md pointer-events-auto shadow-md"
     >
         <a href={getURLForLanguage(i18n.lang, '/')} target="_blank" class="shrink-0">
-            <Logo class="h-5 mt-0.5 mx-2 md:hidden" iconOnly={true} width="16" />
-            <Logo class="h-5 mt-0.5 mx-2 hidden md:block" width="96" />
+            <Logo class="h-5 mt-0.5 mx-2 md:hidden" iconOnly={true} width="20" />
+            <Logo class="h-5 mt-0.5 mx-2 hidden md:block" width="120" />
         </a>
         <Menubar.Root class="border-none shadow-none h-fit p-0">
             <Menubar.Menu>
@@ -151,6 +174,24 @@
                         <FolderOpen size="16" />
                         {i18n._('menu.open')}
                         <Shortcut key="O" ctrl={true} />
+                    </Menubar.Item>
+                    <Menubar.Item onclick={() => driveBrowserOpen.set(true)}>
+                        <Cloud size="16" />Open from GDrive
+                    </Menubar.Item>
+                    <Menubar.Separator />
+                    <Menubar.Item
+                        disabled={$driveBatchActions.busy || !selectedSave?.save}
+                        onclick={() => selectedSave?.save?.()}
+                    >
+                        <Save size="16" />Save to GDrive
+                    </Menubar.Item>
+                    <Menubar.Item
+                        disabled={$driveBatchActions.busy ||
+                            !$driveBatchActions.saveAll ||
+                            !$fileStateCollection.size}
+                        onclick={() => $driveBatchActions.saveAll?.()}
+                    >
+                        <SaveAll size="16" />Save all to GDrive
                     </Menubar.Item>
                     <Menubar.Separator />
                     <Menubar.Item
@@ -542,19 +583,52 @@
                     {i18n._('menu.help')}
                 </span>
             </Button>
-            <Button
-                variant="ghost"
-                href="https://opencollective.com/gpxstudio"
-                target="_blank"
-                class="cursor-default h-fit rounded-md font-bold text-support hover:text-support px-3 py-0.5"
-                aria-label={i18n._('menu.donate')}
-            >
-                <HeartHandshake size="18" class="md:hidden" />
-                <span class="hidden md:flex flex-row items-center">
-                    {i18n._('menu.donate')}
-                    <Heart size="16" class="ml-1" fill="var(--support)" />
-                </span>
-            </Button>
+            <Menubar.Root class="border-none shadow-none h-fit p-0">
+                <Menubar.Menu>
+                    <Menubar.Trigger
+                        class="h-fit min-w-0 max-w-40 gap-1.5 px-2 py-0.5"
+                        aria-label={$driveAccount ? 'Google account menu' : 'Sign in with Google'}
+                        title={$driveAccount?.emailAddress || 'Google account'}
+                    >
+                        {#if $driveAccount}
+                            <span
+                                class="inline-flex size-6 items-center justify-center rounded-full bg-secondary text-xs font-semibold"
+                                aria-hidden="true">{accountInitials($driveAccount)}</span
+                            >
+                        {:else}
+                            <UserRound class="size-4 shrink-0" /><span class="hidden md:block"
+                                >Sign in</span
+                            >
+                        {/if}
+                    </Menubar.Trigger>
+                    <Menubar.Content>
+                        {#if $driveAccount}
+                            <Menubar.Item disabled
+                                >{$driveAccount.emailAddress ||
+                                    $driveAccount.displayName ||
+                                    'GDrive connected'}</Menubar.Item
+                            >
+                            <Menubar.Separator />
+                            <Menubar.Item onclick={() => driveFolderOpen.set(true)}
+                                ><FolderOpen size="16" />GDrive save folder…</Menubar.Item
+                            >
+                            <Menubar.Item onclick={() => driveBrowserOpen.set(true)}
+                                ><Cloud size="16" />Open from GDrive</Menubar.Item
+                            >
+                            <Menubar.Separator />
+                            <Menubar.Item
+                                disabled={$driveBatchActions.busy}
+                                onclick={() => $driveBatchActions.disconnect?.()}
+                                ><LogOut size="16" />Disconnect GDrive</Menubar.Item
+                            >
+                        {:else}
+                            <Menubar.Item onclick={() => driveBrowserOpen.set(true)}
+                                ><UserRound size="16" />Sign in with Google</Menubar.Item
+                            >
+                        {/if}
+                    </Menubar.Content>
+                </Menubar.Menu>
+            </Menubar.Root>
         </div>
     </div>
 </div>

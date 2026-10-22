@@ -14,6 +14,7 @@ export class BoundsManager {
     private _files: Set<string> = new Set();
     private _fileStateCollectionObserver: GPXFileStateCollectionObserver | null = null;
     private _unsubscribes: (() => void)[] = [];
+    private _camera: { pitch: number; bearing: number } | undefined;
 
     constructor() {
         this._fileStateCollectionObserver = new GPXFileStateCollectionObserver(
@@ -27,8 +28,9 @@ export class BoundsManager {
         );
     }
 
-    fitBoundsOnLoad(files: string[]) {
+    fitBoundsOnLoad(files: string[], camera?: { pitch: number; bearing: number }) {
         this.reset();
+        this._camera = camera;
 
         this._files = new Set(files);
         this._fileStateCollectionObserver = new GPXFileStateCollectionObserver(
@@ -72,10 +74,16 @@ export class BoundsManager {
             return;
         }
 
+        const camera = this._camera;
         this._unsubscribes.push(
             map.subscribe((map_) => {
                 if (!map_) return;
-                map_.fitBounds(this._bounds, { padding: 80, linear: true, animate: false });
+                map_.fitBounds(this._bounds, {
+                    padding: 80,
+                    linear: true,
+                    animate: false,
+                    ...camera,
+                });
                 this.reset();
             })
         );
@@ -88,6 +96,7 @@ export class BoundsManager {
         this._unsubscribes.forEach((unsubscribe) => unsubscribe());
         this._unsubscribes = [];
         this._bounds = new LngLatBounds([180, 90, -180, -90]);
+        this._camera = undefined;
     }
 
     centerMapOnSelection() {
@@ -108,12 +117,24 @@ export class BoundsManager {
                     });
                 }
             });
+        } else if (selected.length) {
+            const selectionBounds = get(gpxStatistics).global.bounds;
+            if (this.validBounds(selectionBounds)) {
+                bounds.extend(selectionBounds.southWest);
+                bounds.extend(selectionBounds.northEast);
+            }
         } else {
-            let selectionBounds = get(gpxStatistics).global.bounds;
-            bounds.setNorthEast(selectionBounds.northEast);
-            bounds.setSouthWest(selectionBounds.southWest);
+            fileStateCollection.forEach((fileId) => {
+                const fileBounds = fileStateCollection
+                    .getStatistics(fileId)
+                    ?.getStatisticsFor(new ListFileItem(fileId)).global.bounds;
+                if (fileBounds && this.validBounds(fileBounds)) {
+                    bounds.extend(fileBounds.southWest);
+                    bounds.extend(fileBounds.northEast);
+                }
+            });
         }
-
+        if (bounds.isEmpty()) return;
         get(map)?.fitBounds(bounds, {
             padding: 80,
             easing: () => 1,

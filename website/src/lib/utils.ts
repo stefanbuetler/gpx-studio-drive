@@ -1,3 +1,4 @@
+import { serviceURL } from '$lib/service-url';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { base } from '$app/paths';
@@ -121,9 +122,14 @@ export function getElevation(
     };
 
     let promises = uniqueTiles.map((tile) =>
-        fetch(`https://tiles.gpx.studio/mapterhorn/${ELEVATION_ZOOM}/${tile[0]}/${tile[1]}.webp`, {
-            cache: 'force-cache',
-        })
+        fetch(
+            serviceURL(
+                `https://tiles.gpx.studio/mapterhorn/${ELEVATION_ZOOM}/${tile[0]}/${tile[1]}.webp`
+            ),
+            {
+                cache: 'force-cache',
+            }
+        )
             .then((response) => response.blob())
             .then(
                 (blob) =>

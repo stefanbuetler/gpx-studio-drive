@@ -538,7 +538,7 @@
         "title": "建立您的地圖",
         "maptiler_key": "MapTiler key (可選，僅在使用 MapTiler 地圖時需要提供)",
         "file_urls": "檔案連結（英文逗號分隔）",
-        "drive_ids": "Google 雲端硬碟檔案 IDs（英文逗號分隔）",
+        "drive_ids": "GDrive檔案 IDs（英文逗號分隔）",
         "basemap": "底圖",
         "height": "高度",
         "fill_by": "填充方式",

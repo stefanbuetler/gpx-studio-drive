@@ -538,7 +538,7 @@
         "title": "Luo oma kartta",
         "maptiler_key": "MapTiler key (optional, only required for MapTiler maps)",
         "file_urls": "File URLs (separated by commas)",
-        "drive_ids": "Google Drive tiedostotunnisteet (pilkkuerotetut)",
+        "drive_ids": "GDrive tiedostotunnisteet (pilkkuerotetut)",
         "basemap": "Taustakartta",
         "height": "Korkeus",
         "fill_by": "Fill by",

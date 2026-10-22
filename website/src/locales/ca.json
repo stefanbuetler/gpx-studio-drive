@@ -538,7 +538,7 @@
         "title": "Crea el teu propi mapa",
         "maptiler_key": "MapTiler key (optional, only required for MapTiler maps)",
         "file_urls": "URL dels fitxers (separades per comes)",
-        "drive_ids": "ID del fitxer a Google Drive (separats per comes)",
+        "drive_ids": "ID del fitxer a GDrive (separats per comes)",
         "basemap": "Mapa base",
         "height": "Altura",
         "fill_by": "Omple segons",

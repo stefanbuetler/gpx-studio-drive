@@ -2,16 +2,25 @@ import { base } from '$app/paths';
 import { languages } from '$lib/languages';
 import { getURLForLanguage } from '$lib/utils';
 
+const appOrigin = new URL(import.meta.env.PUBLIC_APP_URL || 'http://localhost:5173').origin;
+/** @param {unknown} value */
+const escape = (value) =>
+    String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('"', '&quot;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+
 export async function handle({ event, resolve }) {
     const language = event.params.language ?? 'en';
     const strings = await import(`./locales/${language}.json`);
-
     const path = event.url.pathname;
-    const page = event.route.id?.replace('/[[language]]', '').split('/')[1] ?? 'home';
-
-    let title = strings.metadata[`${page}_title`];
-    const description = strings.metadata[`description`];
-
+    const page = event.route.id?.replace('/[[language]]', '').split('/')[1] || 'home';
+    let title =
+        page === 'share'
+            ? 'Shared route'
+            : strings.metadata[`${page}_title`] || strings.metadata.home_title;
+    const description = strings.metadata.description;
     if (page === 'help' && event.params.guide) {
         const [guide, subguide] = event.params.guide.split('/');
         const guideModule = subguide
@@ -19,47 +28,43 @@ export async function handle({ event, resolve }) {
             : await import(`./lib/docs/${language}/${guide}.mdx`);
         title = `${title} | ${guideModule.metadata.title}`;
     }
-
-    const htmlTag = `<html lang="${language}" translate="no">`;
-
+    const fullTitle = `trail-explorer — ${title}`;
+    const pageURL = `${appOrigin}${path}`;
+    const imageURL = `${appOrigin}${base}/og_logo.png`;
+    const schema = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'trail-explorer',
+        url: appOrigin,
+    }).replaceAll('<', '\\u003c');
     let headTag = `<head>
-    <title>gpx.studio — ${title}</title>
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "gpx.studio",
-        "url": "https://gpx.studio"
-    }
-    </script>
-    <meta name="description" content="${description}" />
-    <meta property="og:title" content="gpx.studio — ${title}" />
-    <meta property="og:description" content="${description}" />
-    <meta name="twitter:title" content="gpx.studio — ${title}" />
-    <meta name="twitter:description" content="${description}" />
-    <meta property="og:image" content="https://gpx.studio${base}/og_logo.png" />
-    <meta property="og:url" content="https://gpx.studio/" />
+    <title>${escape(fullTitle)}</title>
+    <script type="application/ld+json">${schema}</script>
+    <meta name="application-name" content="trail-explorer" />
+    <meta name="apple-mobile-web-app-title" content="trail-explorer" />
+    <meta name="description" content="${escape(description)}" />
+    <meta property="og:title" content="${escape(fullTitle)}" />
+    <meta property="og:description" content="${escape(description)}" />
+    <meta property="og:image" content="${escape(imageURL)}" />
+    <meta property="og:url" content="${escape(pageURL)}" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="gpx.studio" />
+    <meta property="og:site_name" content="trail-explorer" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="https://gpx.studio${base}/og_logo.png" />
-    <meta name="twitter:url" content="https://gpx.studio/" />
-    <meta name="twitter:site" content="@gpxstudio" />
-    <meta name="twitter:creator" content="@gpxstudio" />
-    <link rel="alternate" hreflang="x-default" href="https://gpx.studio${getURLForLanguage('en', path)}" />
+    <meta name="twitter:title" content="${escape(fullTitle)}" />
+    <meta name="twitter:description" content="${escape(description)}" />
+    <meta name="twitter:image" content="${escape(imageURL)}" />
+    <meta name="twitter:url" content="${escape(pageURL)}" />
+    <link rel="alternate" hreflang="x-default" href="${escape(appOrigin + getURLForLanguage('en', path))}" />
     <link rel="manifest" href="/${language}.manifest.webmanifest" />`;
-
     if (page !== '404') {
-        for (let lang of Object.keys(languages)) {
-            headTag += `   <link rel="alternate" hreflang="${lang}" href="https://gpx.studio${getURLForLanguage(lang, path)}" />
-`;
+        for (const lang of Object.keys(languages)) {
+            headTag += `<link rel="alternate" hreflang="${lang}" href="${escape(appOrigin + getURLForLanguage(lang, path))}" />`;
         }
     }
-
-    const response = await resolve(event, {
+    return resolve(event, {
         transformPageChunk: ({ html }) =>
-            html.replace('<html>', htmlTag).replace('<head>', headTag),
+            html
+                .replace('<html>', `<html lang="${language}" translate="no">`)
+                .replace('<head>', headTag),
     });
-
-    return response;
 }

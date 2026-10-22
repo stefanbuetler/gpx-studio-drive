@@ -77,7 +77,7 @@
             <a href={getURLForLanguage(i18n.lang, '/app')} aria-label="Link to the web app.">
                 <enhanced:img
                     src="/src/lib/assets/img/docs/getting-started/interface.webp"
-                    alt="The gpx.studio interface."
+                    alt="The trail-explorer route editor interface."
                     class="rounded-xl shadow-2xl"
                 /></a
             >

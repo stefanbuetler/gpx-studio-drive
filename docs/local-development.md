@@ -62,7 +62,7 @@ For the isolated feature preview, upload `GOOGLE_CLIENT_SECRET` and `DRIVE_SESSI
 
 ## Public route links
 
-Set `PUBLIC_GOOGLE_API_KEY` and `PUBLIC_APP_URL` in the ignored `website/.env` before building. The app URL must be the public HTTPS address where this build will run. These are public browser settings; never use a client secret or an OAuth access token here.
+Set `GOOGLE_PUBLIC_API_KEY` in the ignored `.dev.vars` and in Cloudflare Worker secrets. Sharing and embedded viewers load this restricted public browser key from `/api/drive/public-config`, so automated builds do not need a duplicate browser-key variable. `PUBLIC_GOOGLE_API_KEY` remains an optional fallback for standalone static hosts. Set `PUBLIC_APP_URL` in the ignored `website/.env` before building. The app URL must be the public HTTPS address where this build will run. These are public browser settings; never use a client secret or an OAuth access token here.
 
 Create an API key in the same Google Cloud project, restrict its API access to **GDrive API**, and restrict its websites to `http://localhost:5173/*` and the exact preview hostname followed by `/*`. A version's unique Cloudflare hostname needs its own website restriction if you use it instead of the preview alias. Rebuild after changing environment settings.
 

@@ -1,11 +1,41 @@
 import type { DriveGPXFile } from './client';
 
+let publicApiKey: string | undefined = import.meta.env.PUBLIC_GOOGLE_API_KEY;
+let configuration: Promise<void> | undefined;
+
+// Read the public browser key from the deployed server, so automated builds do
+// not depend on a duplicate build-time setting. Older static builds still work.
+export function ensurePublicDriveConfiguration(): Promise<void> {
+    if (!configuration) {
+        configuration = (async () => {
+            try {
+                const response = await fetch('/api/drive/public-config', {
+                    credentials: 'omit',
+                    cache: 'no-store',
+                });
+                if (!response.ok) throw new Error('Public configuration unavailable');
+                const config = await response.json();
+                if (typeof config.publicApiKey === 'string' && config.publicApiKey.trim()) {
+                    publicApiKey = config.publicApiKey;
+                }
+            } catch {
+                // Keep compatibility with standalone static hosts that supply a build-time key.
+            }
+            if (!publicApiKey)
+                throw new Error(
+                    'Public sharing is temporarily unavailable. Please try again later.'
+                );
+        })().catch((error) => {
+            configuration = undefined;
+            throw error;
+        });
+    }
+    return configuration;
+}
+
 export function publicDriveURL(fileId: string, resourceKey?: string): string {
-    const key = import.meta.env.PUBLIC_GOOGLE_API_KEY;
-    if (!key)
-        throw new Error(
-            'Public viewing is not configured. Set PUBLIC_GOOGLE_API_KEY for this app.'
-        );
+    const key = publicApiKey;
+    if (!key) throw new Error('Public sharing is temporarily unavailable. Please try again later.');
     const url = new URL(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`);
     url.searchParams.set('alt', 'media');
     url.searchParams.set('key', key);

@@ -6,7 +6,7 @@
     import Map from '$lib/components/map/Map.svelte';
     import LayerControl from '$lib/components/map/layer-control/LayerControl.svelte';
     import OpenIn from '$lib/components/embedding/OpenIn.svelte';
-    import { downloadPublicGPX } from '$lib/drive/public';
+    import { downloadPublicGPX, ensurePublicDriveConfiguration } from '$lib/drive/public';
     import { writable } from 'svelte/store';
     import type { GPXFile } from 'gpx';
     import {
@@ -86,6 +86,7 @@
                 options.elevation.fill == 'none' ? undefined : options.elevation.fill
             );
 
+            if (options.ids.length) await ensurePublicDriveConfiguration();
             const files = (
                 await Promise.all(
                     getFilesFromEmbeddingOptions(options).map(async (url) =>

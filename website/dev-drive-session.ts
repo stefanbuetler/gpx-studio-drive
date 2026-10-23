@@ -21,6 +21,8 @@ export function driveSessionDevPlugin(): Plugin {
                         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
                     }
                     const env: SessionEnv = {
+                        GOOGLE_PUBLIC_API_KEY:
+                            process.env.GOOGLE_PUBLIC_API_KEY ?? vars.GOOGLE_PUBLIC_API_KEY,
                         GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? vars.GOOGLE_CLIENT_ID,
                         GOOGLE_CLIENT_SECRET:
                             process.env.GOOGLE_CLIENT_SECRET ?? vars.GOOGLE_CLIENT_SECRET,

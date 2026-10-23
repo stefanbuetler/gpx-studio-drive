@@ -185,3 +185,30 @@ test('whole-Drive read scope persists when refresh responses omit their scope fi
     assert.equal(restored.status, 200);
     assert.equal(((await restored.json()) as any).scope, fullScope);
 });
+
+test('anonymous public config returns only the restricted viewer key on allowed hosts', async () => {
+    const publicEnv = { ...env, GOOGLE_PUBLIC_API_KEY: 'restricted-public-viewer-key' };
+    const response = await handleDriveSession(
+        new Request(`${origin}/api/drive/public-config`),
+        publicEnv
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { publicApiKey: 'restricted-public-viewer-key' });
+    assert.match(response.headers.get('Cache-Control') || '', /no-store/);
+    const other = await handleDriveSession(
+        new Request('https://unapproved.example.test/api/drive/public-config'),
+        publicEnv
+    );
+    assert.deepEqual(await other.json(), { publicApiKey: null });
+    const missing = await handleDriveSession(new Request(`${origin}/api/drive/public-config`), env);
+    assert.deepEqual(await missing.json(), { publicApiKey: null });
+    assert.equal(
+        (
+            await handleDriveSession(
+                new Request(`${origin}/api/drive/public-config`, { method: 'POST' }),
+                publicEnv
+            )
+        ).status,
+        405
+    );
+});

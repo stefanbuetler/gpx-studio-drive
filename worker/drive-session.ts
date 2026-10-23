@@ -2,6 +2,7 @@
 // never returned to browser JavaScript or included in the static website build.
 export interface SessionEnv {
     GOOGLE_CLIENT_ID?: string;
+    GOOGLE_PUBLIC_API_KEY?: string;
     GOOGLE_CLIENT_SECRET?: string;
     DRIVE_SESSION_SECRET?: string;
     DRIVE_ALLOWED_ORIGINS?: string;
@@ -129,6 +130,14 @@ export async function handleDriveSession(
     const url = new URL(request.url);
     const origin = url.origin;
     const route = url.pathname;
+    // This restricted API key is intended for anonymous browser downloads.
+    // Never return OAuth client secrets, session secrets, or access tokens here.
+    if (route === '/api/drive/public-config') {
+        if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+        return json({
+            publicApiKey: allowedOrigin(origin, env) ? (env.GOOGLE_PUBLIC_API_KEY ?? null) : null,
+        });
+    }
     if (route === '/api/drive/config' && request.method === 'GET') {
         return json({
             persistent: configured(env) && allowedOrigin(origin, env),

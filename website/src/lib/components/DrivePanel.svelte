@@ -17,7 +17,12 @@
     import DriveFolderDialog from '$lib/components/DriveFolderDialog.svelte';
     import { readSaveFolder, writeSaveFolder } from '$lib/drive/save-folder';
     import DriveShareDialog from '$lib/components/DriveShareDialog.svelte';
-    import { publicDriveURL, publicViewerURL, downloadPublicGPX } from '$lib/drive/public';
+    import {
+        ensurePublicDriveConfiguration,
+        publicDriveURL,
+        publicViewerURL,
+        downloadPublicGPX,
+    } from '$lib/drive/public';
     import { onMount, onDestroy, untrack } from 'svelte';
     import { dragging } from '$lib/components/file-list/sortable-file-list';
     import {
@@ -782,6 +787,7 @@
     }
     async function share(file: DriveGPXFile): Promise<string> {
         if (busy) throw new Error('Wait for the current operation to finish.');
+        await ensurePublicDriveConfiguration();
         const view = captureSharedView();
         publicViewerURL(file, view);
         busy = true;

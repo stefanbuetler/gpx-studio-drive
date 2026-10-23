@@ -1,5 +1,6 @@
 {
   "name": "gpx-studio-drive",
+  "workers_dev": true,
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-19",
   "routes": [

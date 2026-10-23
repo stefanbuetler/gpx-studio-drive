@@ -1,23 +1,25 @@
 <script lang="ts">
     import {
-        driveBrowserOpen,
-        driveFolderOpen,
+        fileDestination,
+        saveOpenFile,
         driveAccount,
         accountInitials,
         driveLocalActions,
         driveBatchActions,
     } from '$lib/drive/browser';
+    import * as Dialog from '$lib/components/ui/dialog';
+    import ProjectCredit from '$lib/components/ProjectCredit.svelte';
+    let aboutOpen = $state(false);
     import * as Menubar from '$lib/components/ui/menubar/index.js';
     import { Button } from '$lib/components/ui/button';
+    import FileDestinationDialog from '$lib/components/FileDestinationDialog.svelte';
     import Logo from '$lib/components/Logo.svelte';
     import Shortcut from '$lib/components/Shortcut.svelte';
     import {
-        Cloud,
+        Share2,
         LogOut,
         Save,
-        SaveAll,
         Plus,
-        Copy,
         Download,
         Undo2,
         Redo2,
@@ -60,7 +62,6 @@
     import { map } from '$lib/components/map/map';
     import { editMetadata } from '$lib/components/file-list/metadata/utils.svelte';
     import { editStyle } from '$lib/components/file-list/style/utils.svelte';
-    import { exportState, ExportState } from '$lib/components/export/utils.svelte';
     import { anySelectedLayer } from '$lib/components/map/layer-control/utils';
     import { defaultOverlays } from '$lib/assets/layers';
     import LayerControlSettings from '$lib/components/map/layer-control/LayerControlSettings.svelte';
@@ -71,13 +72,7 @@
     import { languages } from '$lib/languages';
     import { getURLForLanguage } from '$lib/utils';
     import { settings } from '$lib/logic/settings';
-    import {
-        createFile,
-        fileActions,
-        loadFiles,
-        pasteSelection,
-        triggerFileInput,
-    } from '$lib/logic/file-actions';
+    import { createFile, fileActions, loadFiles, pasteSelection } from '$lib/logic/file-actions';
     import { fileStateCollection } from '$lib/logic/file-state';
     import { fileActionManager } from '$lib/logic/file-action-manager';
     import { copied, selection } from '$lib/logic/selection';
@@ -102,6 +97,9 @@
         routing,
     } = settings;
 
+    let closingSelection = $derived(
+        $selection.getSelected().some((item) => item instanceof ListFileItem)
+    );
     let selectedSaveIds = $derived([
         ...new Set(
             $selection
@@ -164,78 +162,41 @@
                     <span class="hidden md:block">{i18n._('gpx.file')}</span>
                 </Menubar.Trigger>
                 <Menubar.Content class="border-none">
-                    <Menubar.Item onclick={createFile}>
-                        <Plus size="16" />
-                        {i18n._('menu.new')}
-                        <Shortcut key="+" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Separator />
-                    <Menubar.Item onclick={triggerFileInput}>
-                        <FolderOpen size="16" />
-                        {i18n._('menu.open')}
-                        <Shortcut key="O" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Item onclick={() => driveBrowserOpen.set(true)}>
-                        <Cloud size="16" />Open from GDrive
-                    </Menubar.Item>
-                    <Menubar.Separator />
-                    <Menubar.Item
-                        disabled={$driveBatchActions.busy || !selectedSave?.save}
-                        onclick={() => selectedSave?.save?.()}
+                    <Menubar.Item onclick={createFile}
+                        ><Plus size="16" />New<Shortcut key="+" ctrl={true} /></Menubar.Item
                     >
-                        <Save size="16" />Save to GDrive
-                    </Menubar.Item>
                     <Menubar.Item
-                        disabled={$driveBatchActions.busy ||
-                            !$driveBatchActions.saveAll ||
-                            !$fileStateCollection.size}
-                        onclick={() => $driveBatchActions.saveAll?.()}
+                        onclick={() => setTimeout(() => fileDestination.set({ mode: 'open' }), 0)}
+                        ><FolderOpen size="16" />Open…<Shortcut key="O" ctrl={true} /></Menubar.Item
                     >
-                        <SaveAll size="16" />Save all to GDrive
-                    </Menubar.Item>
                     <Menubar.Separator />
                     <Menubar.Item
-                        onclick={fileActions.duplicateSelection}
-                        disabled={$selection.size == 0}
+                        aria-label="Save"
+                        disabled={$driveBatchActions.busy || !selectedSave}
+                        onclick={() => saveOpenFile(selectedSaveIds[0])}
                     >
-                        <Copy size="16" />
-                        {i18n._('menu.duplicate')}
-                        <Shortcut key="D" ctrl={true} />
+                        <Save size="16" />Save<Shortcut key="S" ctrl={true} />
                     </Menubar.Item>
+                    <Menubar.Item
+                        aria-label="Save as…"
+                        disabled={$driveBatchActions.busy || !selectedSave}
+                        onclick={() => saveOpenFile(selectedSaveIds[0], true)}
+                    >
+                        <Download size="16" />Save as…<Shortcut key="S" ctrl={true} shift={true} />
+                    </Menubar.Item>
+                    {#if selectedSave?.share}
+                        <Menubar.Item
+                            disabled={$driveBatchActions.busy}
+                            onclick={() => selectedSave?.share?.()}
+                            ><Share2 size="16" />Share…</Menubar.Item
+                        >
+                    {/if}
                     <Menubar.Separator />
                     <Menubar.Item
+                        disabled={$selection.size === 0}
                         onclick={() => tick().then(fileActions.deleteSelectedFiles)}
-                        disabled={$selection.size == 0}
+                        ><FileX size="16" />Close</Menubar.Item
                     >
-                        <FileX size="16" />
-                        {i18n._('menu.delete')}
-                        <Shortcut key="⌫" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Item
-                        onclick={fileActions.deleteAllFiles}
-                        disabled={fileStateCollection.size == 0}
-                    >
-                        <FileX size="16" />
-                        {i18n._('menu.delete_all')}
-                        <Shortcut key="⌫" ctrl={true} shift={true} />
-                    </Menubar.Item>
-                    <Menubar.Separator />
-                    <Menubar.Item
-                        onclick={() => (exportState.current = ExportState.SELECTION)}
-                        disabled={$selection.size == 0}
-                    >
-                        <Download size="16" />
-                        {i18n._('menu.export')}
-                        <Shortcut key="S" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Item
-                        onclick={() => (exportState.current = ExportState.ALL)}
-                        disabled={fileStateCollection.size == 0}
-                    >
-                        <Download size="16" />
-                        {i18n._('menu.export_all')}
-                        <Shortcut key="S" ctrl={true} shift={true} />
-                    </Menubar.Item>
                 </Menubar.Content>
             </Menubar.Menu>
             <Menubar.Menu>
@@ -390,11 +351,16 @@
                     {/if}
                     <Menubar.Separator />
                     <Menubar.Item
-                        onclick={() => tick().then(fileActions.deleteSelection)}
+                        onclick={() =>
+                            tick().then(async () => {
+                                if (closingSelection) await fileActions.deleteSelectedFiles();
+                                else await fileActions.deleteSelection();
+                            })}
                         disabled={$selection.size == 0}
                     >
-                        <Trash2 size="16" />
-                        {i18n._('menu.delete')}
+                        {#if closingSelection}<FileX size="16" />Close{:else}<Trash2
+                                size="16"
+                            />{i18n._('menu.delete')}{/if}
                         <Shortcut key="⌫" ctrl={true} />
                     </Menubar.Item>
                 </Menubar.Content>
@@ -587,7 +553,7 @@
                 <Menubar.Menu>
                     <Menubar.Trigger
                         class="h-fit min-w-0 max-w-40 gap-1.5 px-2 py-0.5"
-                        aria-label={$driveAccount ? 'Google account menu' : 'Sign in with Google'}
+                        aria-label={$driveAccount ? 'Google account menu' : 'Connect GDrive'}
                         title={$driveAccount?.emailAddress || 'Google account'}
                     >
                         {#if $driveAccount}
@@ -597,7 +563,7 @@
                             >
                         {:else}
                             <UserRound class="size-4 shrink-0" /><span class="hidden md:block"
-                                >Sign in</span
+                                >Connect GDrive</span
                             >
                         {/if}
                     </Menubar.Trigger>
@@ -609,23 +575,25 @@
                                     'GDrive connected'}</Menubar.Item
                             >
                             <Menubar.Separator />
-                            <Menubar.Item onclick={() => driveFolderOpen.set(true)}
-                                ><FolderOpen size="16" />GDrive save folder…</Menubar.Item
-                            >
-                            <Menubar.Item onclick={() => driveBrowserOpen.set(true)}
-                                ><Cloud size="16" />Open from GDrive</Menubar.Item
-                            >
-                            <Menubar.Separator />
                             <Menubar.Item
                                 disabled={$driveBatchActions.busy}
                                 onclick={() => $driveBatchActions.disconnect?.()}
                                 ><LogOut size="16" />Disconnect GDrive</Menubar.Item
                             >
                         {:else}
-                            <Menubar.Item onclick={() => driveBrowserOpen.set(true)}
-                                ><UserRound size="16" />Sign in with Google</Menubar.Item
+                            <Menubar.Item
+                                disabled={$driveBatchActions.busy}
+                                onclick={() => $driveBatchActions.connect?.()}
+                                ><UserRound size="16" />Connect GDrive</Menubar.Item
                             >
                         {/if}
+                        <Menubar.Separator />
+                        <Menubar.Item
+                            onclick={() =>
+                                setTimeout(() => {
+                                    aboutOpen = true;
+                                }, 0)}><Info size="16" />About trail-explorer</Menubar.Item
+                        >
                     </Menubar.Content>
                 </Menubar.Menu>
             </Menubar.Root>
@@ -634,6 +602,7 @@
 </div>
 
 <Export />
+<FileDestinationDialog />
 <LayerControlSettings bind:open={layerSettingsOpen} />
 
 <svelte:window
@@ -656,7 +625,7 @@
             createFile();
             e.preventDefault();
         } else if (e.key === 'o' && (e.metaKey || e.ctrlKey)) {
-            triggerFileInput();
+            fileDestination.set({ mode: 'open' });
             e.preventDefault();
         } else if (e.key === 'd' && (e.metaKey || e.ctrlKey)) {
             fileActions.duplicateSelection();
@@ -676,14 +645,9 @@
                 pasteSelection();
                 e.preventDefault();
             }
-        } else if ((e.key === 's' || e.key == 'S') && (e.metaKey || e.ctrlKey)) {
-            if (e.shiftKey) {
-                if (fileStateCollection.size > 0) {
-                    exportState.current = ExportState.ALL;
-                }
-            } else if ($selection.size > 0) {
-                exportState.current = ExportState.SELECTION;
-            }
+        } else if ((e.key === 's' || e.key === 'S') && (e.metaKey || e.ctrlKey)) {
+            if (!targetInput && selectedSaveIds.length === 1 && !$driveBatchActions.busy)
+                saveOpenFile(selectedSaveIds[0], e.shiftKey);
             e.preventDefault();
         } else if ((e.key === 'z' || e.key == 'Z') && (e.metaKey || e.ctrlKey)) {
             if (e.shiftKey) {
@@ -771,6 +735,17 @@
         }
     }}
 />
+
+<Dialog.Root bind:open={aboutOpen}>
+    <Dialog.Content>
+        <Dialog.Header
+            ><Dialog.Title>About trail-explorer</Dialog.Title><Dialog.Description
+                >GPX editing, cloud files, and route sharing.</Dialog.Description
+            ></Dialog.Header
+        >
+        <ProjectCredit />
+    </Dialog.Content>
+</Dialog.Root>
 
 <style lang="postcss">
     @reference "../../app.css";

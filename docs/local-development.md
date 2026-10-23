@@ -17,7 +17,7 @@ Open http://localhost:5173/app and choose **File → Open from GDrive**. The mod
 
 ## Routing, maps, and elevation on localhost
 
-The public gpx.studio services do not send browser CORS permission for localhost. During `npm run dev`, requests to the routing, style, and tile services use fixed same-origin `/__gpx_services/` paths handled by Vite's development proxy. This covers both application fetches and MapLibre resource requests. Only the three configured upstream hosts are proxied; production builds keep their original URLs. Keep the dev server bound to localhost.
+The public gpx.studio services do not send browser CORS permission for localhost. During `npm run dev`, requests to the routing, style, and tile services use fixed same-origin `/__gpx_services/` paths handled by Vite's development proxy. This covers both application fetches and MapLibre resource requests. POI requests use `/api/pois`, proxied to the fixed Overpass service during development and handled by the Worker in production. Only the configured upstream hosts are proxied; production also uses fixed same-origin routes for GraphHopper and elevation tiles, since those upstreams do not allow the trail-explorer origin. Styles and other map resources retain their original production URLs. Keep the dev server bound to localhost.
 
 ## Google configuration
 

@@ -102,6 +102,7 @@ async function setup(page: Page, mode = 'success') {
                 contentType: 'application/gpx+xml',
                 body: mode === 'invalid' ? '<html>bad</html>' : gpx,
             });
+        if (id === 'gpx-folder') return r.fulfill({ json: folderValue });
         if (id === 'route-1') return r.fulfill({ json: copies.get(id) || source });
         if (id.startsWith('copy-'))
             return copies.has(id)
@@ -157,11 +158,33 @@ async function contextAction(page: Page, action: string | RegExp, name = 'Alpine
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu')).toHaveCount(0);
     await page.getByRole('button', { name, exact: true }).last().click({ button: 'right' });
-    await page.getByRole('menuitem', { name: action, exact: true }).click();
+    await page
+        .getByRole('menuitem', {
+            name:
+                action === 'Save to GDrive' ? 'Save' : action === 'Share route' ? 'Share…' : action,
+            exact: true,
+        })
+        .click();
 }
 async function save(page: Page, name = 'Alpine route') {
     await contextAction(page, 'Save to GDrive', name);
-    await expect(page.getByText(`Saved ${name}.gpx to GPX Files`, { exact: true })).toBeVisible();
+    const destination = page.getByRole('dialog', { name: 'Save as', exact: true });
+    const savedNotice = page.getByText(new RegExp(`Saved ${name}\\.gpx to `));
+    const pendingFolder = page.getByRole('dialog', { name: 'Save to GDrive', exact: true });
+    await expect(destination.or(pendingFolder).or(savedNotice)).toBeVisible();
+    if (await destination.isVisible())
+        await destination.getByRole('button', { name: /^GDrive/ }).click();
+    const folderDialog = page.getByRole('dialog', { name: 'Save to GDrive', exact: true });
+    await expect(folderDialog.or(savedNotice)).toBeVisible();
+    if (await folderDialog.isVisible()) {
+        await folderDialog.getByRole('textbox', { name: 'New folder name' }).fill('GPX Files');
+        await folderDialog.getByRole('button', { name: 'Create folder', exact: true }).click();
+        await expect(folderDialog.getByText('My Drive / GPX Files', { exact: true })).toBeVisible();
+        await folderDialog.getByRole('button', { name: 'Save here', exact: true }).click();
+    }
+    await expect(
+        page.getByText(new RegExp(`Saved ${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.gpx to `))
+    ).toBeVisible();
 }
 async function edit(page: Page, name = 'Alpine route', next = 'Edited alpine route') {
     await closeDriveBrowser(page);
@@ -188,7 +211,7 @@ test('File menu opens a searchable picker with no Save or Share actions on sourc
     expect(errors).toEqual([]);
 });
 
-test('first save creates a managed copy in GPX Files, then unchanged saves skip writes and edits update that copy', async ({
+test('first save creates a managed copy in the explicitly chosen folder, then unchanged saves skip writes and edits update that copy', async ({
     page,
 }) => {
     const { panel, writes, copies, errors } = await setup(page);
@@ -285,20 +308,16 @@ test('reusing a deleted local file ID cannot overwrite its former Drive copy', a
     expect(writes.every((w) => w.method === 'POST')).toBe(true);
 });
 
-test('Share from a local file saves into GPX Files before making only the copy public', async ({
-    page,
-}) => {
+test('Share on a saved cloud copy does not save or publish until confirmed', async ({ page }) => {
     const { panel, writes } = await setup(page);
     await importRoute(page, panel);
+    await save(page);
+    const before = writes.length;
     await contextAction(page, 'Share route');
     const dialog = page.getByRole('dialog', { name: 'Share route', exact: true });
-    await expect(dialog).toContainText('GPX Files');
-    expect(writes).toHaveLength(0);
-    await dialog.getByRole('button', { name: 'Make public and create link', exact: true }).click();
-    await expect(dialog.getByLabel('Public route link')).toHaveValue(/id=copy-/);
-    expect(writes).toHaveLength(3);
-    expect(writes[2].url).toMatch(/copy-\d+\/permissions/);
-    expect(writes.every((w) => !w.url.includes('/route-1'))).toBe(true);
+    await expect(dialog).toContainText('Local edits are not uploaded');
+    expect(writes).toHaveLength(before);
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
 });
 
 test('cancelling Share does not save or publish anything', async ({ page }) => {
@@ -333,7 +352,7 @@ test('Drive modal opens independently of the file tree and closes with Done', as
     const { panel } = await setup(page);
     await closeDriveBrowser(page);
     await page.keyboard.press('Control+l');
-    await expect(page.getByRole('heading', { name: 'Local files' })).toBeHidden();
+    await expect(page.getByRole('heading', { name: /^Local files/ })).toBeHidden();
     await openDriveBrowser(page);
     await expect(panel.getByRole('button', { name: original.name, exact: true })).toBeVisible();
     await closeDriveBrowser(page);
@@ -414,60 +433,7 @@ for (const mode of ['Duplicate', 'Copy and paste']) {
     });
 }
 
-test('the account button replaces Donate and clears its identity on disconnect', async ({
-    page,
-}) => {
-    const { panel } = await setup(page);
-    await closeDriveBrowser(page);
-    const account = page.getByRole('button', { name: 'Google account: Trail Walker', exact: true });
-    await expect(account).toBeVisible();
-    await expect(account).toHaveAttribute('title', 'walker@example.test');
-    await expect(page.getByRole('link', { name: 'Donate', exact: true })).toHaveCount(0);
-    await account.click();
-    await expect(panel).toBeVisible();
-    await panel.getByRole('button', { name: 'Disconnect', exact: true }).click();
-    await closeDriveBrowser(page);
-    await expect(
-        page.getByRole('button', { name: 'Sign in with Google', exact: true })
-    ).toBeVisible();
-});
-
-for (const mode of ['success', 'batch-failure']) {
-    test(`save all keeps working copies open: ${mode}`, async ({ page }) => {
-        const { panel, copies, errors } = await setup(page, mode);
-        await importRoute(page, panel);
-        await contextAction(page, /^Duplicate/);
-        await expect(page.getByRole('button', { name: 'Alpine route', exact: true })).toHaveCount(
-            4
-        );
-        await page.keyboard.press('Escape');
-        const button = page.getByRole('button', {
-            name: 'Save all to GDrive',
-            exact: true,
-        });
-        await button.click();
-        if (mode === 'success') {
-            await expect(
-                page.getByText('Saved 2 local files to GDrive', { exact: true })
-            ).toBeVisible();
-            expect(copies.size).toBe(2);
-            await expect(
-                page.getByRole('button', { name: 'Alpine route', exact: true })
-            ).toHaveCount(4);
-            await expect(button).toBeEnabled();
-        } else {
-            await expect(page.getByText(/GDrive error \(403\)/)).toBeVisible();
-            expect(copies.size).toBe(1);
-            await expect(
-                page.getByRole('button', { name: 'Alpine route', exact: true })
-            ).toHaveCount(4);
-            await expect(button).toBeEnabled();
-        }
-        expect(errors).toEqual([]);
-    });
-}
-
-test('close all works independently without saving and Undo restores the local copies', async ({
+test('close all cloud files keeps local files open and supports Undo', async ({
     page,
 }) => {
     const { panel, writes, errors } = await setup(page);
@@ -475,75 +441,28 @@ test('close all works independently without saving and Undo restores the local c
     await contextAction(page, /^Duplicate/);
     await expect(page.getByRole('button', { name: 'Alpine route', exact: true })).toHaveCount(4);
     await page.keyboard.press('Escape');
-    await openDriveBrowser(page);
-    await panel.getByRole('button', { name: 'Disconnect', exact: true }).click();
-    await closeDriveBrowser(page);
-    await page.getByRole('button', { name: 'Close all local files', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Alpine route', exact: true })).toHaveCount(0);
+    await page.getByRole('menuitem', { name: 'Google account menu', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Disconnect GDrive', exact: true }).click();
+    await page.getByRole('button', { name: 'Close all cloud files', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Alpine route', exact: true })).toHaveCount(2);
     expect(writes).toHaveLength(0);
-    await expect(page.getByText('Closed 2 local files', { exact: true })).toBeVisible();
+    await expect(page.getByText('Closed 1 file', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Alpine route', exact: true })).toHaveCount(4);
     expect(writes).toHaveLength(0);
     expect(errors).toEqual([]);
 });
 
-test('File menu saves the selected route or all local routes with the file tree hidden', async ({
-    page,
-}) => {
-    const { panel, copies, writes } = await setup(page);
+test('File menu Close offers Undo and restores the working copy', async ({ page }) => {
+    const { panel, writes, errors } = await setup(page);
     await importRoute(page, panel);
-    await contextAction(page, /^Duplicate/);
-    await expect(page.getByRole('button', { name: 'Alpine route', exact: true })).toHaveCount(4);
-    await edit(page, 'Alpine route', 'Second route');
-    await page.keyboard.press('Control+l');
-    async function fileMenu() {
-        await page.keyboard.press('Escape');
-        await page.getByRole('menuitem', { name: 'File', exact: true }).press('Enter');
-    }
-    await fileMenu();
-    await page.getByRole('menuitem', { name: 'Save to GDrive', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'File', exact: true }).press('Enter');
+    await page.getByRole('menuitem', { name: 'Close', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Alpine route', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect(
-        page.getByText('Saved Second route.gpx to GPX Files', { exact: true })
+        page.getByRole('button', { name: 'Alpine route', exact: true }).last()
     ).toBeVisible();
-    expect(copies.size).toBe(1);
-    expect([...copies.values()][0].name).toBe('Second route.gpx');
-    await fileMenu();
-    await page.getByRole('menuitem', { name: 'Save all to GDrive', exact: true }).click();
-    await expect(page.getByText('Saved 2 local files to GDrive', { exact: true })).toBeVisible();
-    expect(copies.size).toBe(2);
-    expect(writes.every((write) => write.method === 'POST')).toBe(true);
-    const modifier = await page.evaluate(() =>
-        navigator.platform.includes('Mac') ? 'Meta' : 'Control'
-    );
-    await page
-        .getByRole('button', { name: 'Second route', exact: true })
-        .last()
-        .click({ modifiers: [modifier as 'Meta' | 'Control'] });
-    await fileMenu();
-    await expect(
-        page.getByRole('menuitem', { name: 'Save to GDrive', exact: true })
-    ).toHaveAttribute('aria-disabled', 'true');
-    await expect(
-        page.getByRole('menuitem', { name: 'Save all to GDrive', exact: true })
-    ).toBeEnabled();
+    expect(writes).toHaveLength(0);
+    expect(errors).toEqual([]);
 });
-
-for (const entry of ['Delete', 'Delete all']) {
-    test(`File menu ${entry} offers Undo and restores the local route`, async ({ page }) => {
-        const { panel, writes, errors } = await setup(page);
-        await importRoute(page, panel);
-        await page.getByRole('menuitem', { name: 'File', exact: true }).press('Enter');
-        const pattern = entry === 'Delete' ? /^Delete(?! all)/ : /^Delete all/;
-        await page.getByRole('menuitem', { name: pattern }).click();
-        await expect(page.getByRole('button', { name: 'Alpine route', exact: true })).toHaveCount(
-            0
-        );
-        await page.getByRole('button', { name: 'Undo', exact: true }).click();
-        await expect(
-            page.getByRole('button', { name: 'Alpine route', exact: true }).last()
-        ).toBeVisible();
-        expect(writes).toHaveLength(0);
-        expect(errors).toEqual([]);
-    });
-}

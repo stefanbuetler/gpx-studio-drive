@@ -123,7 +123,7 @@ async function owner(page: Page, publicAlready = false, permissionStatus = 200) 
         .getByRole('button', { name: 'Shared alpine route', exact: true })
         .last()
         .click({ button: 'right' });
-    await page.getByRole('menuitem', { name: 'Share route', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Share…', exact: true }).click();
     return {
         dialog: page.getByRole('dialog', { name: 'Share route' }),
         permissions,

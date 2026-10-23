@@ -1231,7 +1231,6 @@ export const overpassQueryData: Record<string, OverpassQueryData> = {
                 amenity: ['drinking_water', 'water_point'],
             },
             {
-                natural: 'spring',
                 drinking_water: 'yes',
             },
         ],

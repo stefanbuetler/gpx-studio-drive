@@ -692,7 +692,18 @@ export class DriveClient {
     }
 
     async validateSaveFolder(id: string): Promise<DriveGPXFile> {
-        const folder = await this.getMetadata(id);
+        // My Drive is a valid upload destination even when drive.file cannot read
+        // its metadata. Keep the root alias; the upload still checks write access.
+        if (id === 'root')
+            return { id: 'root', name: 'My Drive', mimeType: 'application/vnd.google-apps.folder' };
+        let folder: DriveGPXFile;
+        try {
+            folder = await this.getMetadata(id);
+        } catch (e) {
+            if (e instanceof Error && /GDrive error \((403|404)\)/.test(e.message))
+                throw new Error('This folder is unavailable or GDrive has not granted access to it. Choose another folder, create one, or browse all GDrive folders.');
+            throw e;
+        }
         if (
             folder.trashed ||
             folder.mimeType !== 'application/vnd.google-apps.folder' ||
@@ -719,48 +730,6 @@ export class DriveClient {
             }),
         });
         return (await response.json()) as DriveGPXFile;
-    }
-
-    async ensureGPXFolder(): Promise<DriveGPXFile> {
-        let pageToken: string | undefined;
-        const seen = new Set<string>();
-        do {
-            const params = new URLSearchParams({
-                q: "trashed = false and mimeType = 'application/vnd.google-apps.folder' and name = 'GPX Files' and appProperties has { key='trailExplorerFolder' and value='1' }",
-                fields: `nextPageToken,files(${FILE_FIELDS})`,
-                pageSize: '100',
-                orderBy: 'createdTime',
-            });
-            if (pageToken) params.set('pageToken', pageToken);
-            const response = await this.request(`${API}?${params}`);
-            const data = await response.json();
-            const folder = ((data.files as DriveGPXFile[]) ?? []).find(
-                (file) =>
-                    file.isAppAuthorized === true && file.appProperties?.trailExplorerFolder === '1'
-            );
-            if (folder) {
-                if (folder.capabilities?.canAddChildren === false)
-                    throw new Error(
-                        'The GPX Files folder is read-only. Restore its write permission in GDrive.'
-                    );
-                return folder;
-            }
-            pageToken = data.nextPageToken;
-            if (pageToken && seen.has(pageToken))
-                throw new Error('GDrive folder search did not complete. Try again.');
-            if (pageToken) seen.add(pageToken);
-        } while (pageToken);
-        const response = await this.request(`${API}?fields=${FILE_FIELDS}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: 'GPX Files',
-                mimeType: 'application/vnd.google-apps.folder',
-                parents: ['root'],
-                appProperties: { trailExplorerFolder: '1' },
-            }),
-        });
-        return { ...(await response.json()), isAppAuthorized: true };
     }
 
     async upload(file: File, folderId?: string): Promise<DriveGPXFile> {

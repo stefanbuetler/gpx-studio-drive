@@ -34,10 +34,10 @@ import { gpxStatistics } from '$lib/logic/statistics';
 import { boundsManager } from './bounds';
 import { getGPXName } from './file-name';
 import { toast } from 'svelte-sonner';
+import { cloudCloseGuard } from '$lib/drive/browser';
 
 function notifyDeleteUndo(message: string) {
     toast.success(message, {
-        description: 'Removed from this browser only. Saved GDrive files are unchanged.',
         action: { label: 'Undo', onClick: () => fileActionManager.undo() },
     });
 }
@@ -165,6 +165,7 @@ export const fileActions = {
                         let newFile = file.clone();
                         newFile._data.id = ids[index++];
                         delete newFile._data.driveIdentity;
+                        delete newFile._data.cloudLink;
                         draft.set(newFile._data.id, freeze(newFile));
                     }
                 } else {
@@ -490,6 +491,7 @@ export const fileActions = {
                                 );
                                 newFile._data.id = fileIds[index];
                                 delete newFile._data.driveIdentity;
+                                delete newFile._data.cloudLink;
                                 newFile.metadata.name =
                                     track.name ?? `${file.metadata.name} (${index + 1})`;
                                 draft.set(newFile._data.id, freeze(newFile));
@@ -515,6 +517,7 @@ export const fileActions = {
                                 );
                                 newFile._data.id = fileIds[index];
                                 delete newFile._data.driveIdentity;
+                                delete newFile._data.cloudLink;
                                 newFile.metadata.name = `${file.trk[0].name ?? file.metadata.name} (${index + 1})`;
                                 draft.set(newFile._data.id, freeze(newFile));
                             });
@@ -578,6 +581,7 @@ export const fileActions = {
                         let newFile2 = file.clone();
                         newFile2._data.id = getFileIds(1)[0];
                         delete newFile2._data.driveIdentity;
+                        delete newFile2._data.cloudLink;
                         newFile2.crop(absoluteIndex, file.getNumberOfTrackPoints() - 1);
                         draft.set(newFile2._data.id, freeze(newFile2));
                     }
@@ -778,13 +782,18 @@ export const fileActions = {
             });
         });
     },
-    deleteSelection: () => {
+    deleteSelection: async () => {
         if (get(selection).size === 0) {
             return;
         }
+        const selected = get(selection).getSelected();
+        const closing = selected
+            .filter((item) => item instanceof ListFileItem)
+            .map((item) => item.getFileId());
+        if (!(await get(cloudCloseGuard)(closing))) return false;
         return fileActionManager
             .applyGlobal((draft) => {
-                selection.applyToOrderedSelectedItemsFromFile((fileId, level, items) => {
+                applyToOrderedItemsFromFile(selected, (fileId, level, items) => {
                     if (level === ListLevel.FILE) {
                         draft.delete(fileId);
                     } else {
@@ -822,7 +831,15 @@ export const fileActions = {
                     }
                 });
             })
-            .then(() => notifyDeleteUndo('Deleted selection'));
+            .then(() =>
+                notifyDeleteUndo(
+                    selected.every((item) => item instanceof ListFileItem)
+                        ? 'Closed files'
+                        : closing.length
+                          ? 'Updated selection'
+                          : 'Deleted selection'
+                )
+            );
     },
     addElevationToSelection: async () => {
         if (get(selection).size === 0) {
@@ -892,28 +909,36 @@ export const fileActions = {
             });
         });
     },
-    deleteSelectedFiles: () => {
-        if (get(selection).size === 0) {
-            return;
-        }
-        return fileActionManager
-            .applyGlobal((draft) => {
-                selection.applyToOrderedSelectedItemsFromFile((fileId, level, items) => {
-                    draft.delete(fileId);
-                });
-            })
-            .then(() => notifyDeleteUndo('Deleted selected files'));
-    },
-    closeFiles: (ids: string[]) =>
-        fileActionManager.applyGlobal((draft) => {
+    deleteSelectedFiles: async () => {
+        const ids = [
+            ...new Set(
+                get(selection)
+                    .getSelected()
+                    .map((item) => item.getFileId())
+            ),
+        ];
+        if (!ids.length || !(await get(cloudCloseGuard)(ids))) return false;
+        await fileActionManager.applyGlobal((draft) => {
             ids.forEach((id) => draft.delete(id));
-        }),
-    deleteAllFiles: () => {
-        return fileActionManager
-            .applyGlobal((draft) => {
-                draft.clear();
-            })
-            .then(() => notifyDeleteUndo('Deleted all local files'));
+        });
+        notifyDeleteUndo('Closed files');
+        return true;
+    },
+    closeFiles: async (ids: string[]) => {
+        if (!(await get(cloudCloseGuard)(ids))) return false;
+        await fileActionManager.applyGlobal((draft) => {
+            ids.forEach((id) => draft.delete(id));
+        });
+        return true;
+    },
+    deleteAllFiles: async () => {
+        const ids = [...get(fileStateCollection).keys()];
+        if (!(await get(cloudCloseGuard)(ids))) return false;
+        await fileActionManager.applyGlobal((draft) => {
+            ids.forEach((id) => draft.delete(id));
+        });
+        notifyDeleteUndo('Closed all files');
+        return true;
     },
 };
 
@@ -943,6 +968,11 @@ export function pasteSelection() {
         }
         toParent = toParent.getParent();
     }
+
+    // A copied POI group can be merged into an existing POI list, including
+    // when the destination is one of its points rather than the group heading.
+    if (fromItems[0] instanceof ListWaypointsItem && toParent instanceof ListWaypointItem)
+        toParent = toParent.getParent();
 
     let toItems: ListItem[] = [];
     if (toParent.level === ListLevel.ROOT) {
@@ -984,7 +1014,9 @@ export function pasteSelection() {
                         );
                     }
                 } else if (toParent instanceof ListWaypointsItem) {
-                    if (item instanceof ListWaypointItem) {
+                    if (item instanceof ListWaypointsItem) {
+                        toItems.push(new ListWaypointsItem(toParent.getFileId()));
+                    } else if (item instanceof ListWaypointItem) {
                         toItems.push(
                             new ListWaypointItem(
                                 toParent.getFileId(),
@@ -1134,8 +1166,10 @@ export function moveItems(
                         if (remove) {
                             files.delete(newFile._data.id);
                         }
-                        if (!remove || newFile._data.id !== item.getFileId())
+                        if (!remove || newFile._data.id !== item.getFileId()) {
                             delete newFile._data.driveIdentity;
+                            delete newFile._data.cloudLink;
+                        }
                         newFile._data.id = item.getFileId();
                         files.set(item.getFileId(), freeze(newFile));
                     } else if (context[i] instanceof Track) {

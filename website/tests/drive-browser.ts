@@ -27,9 +27,13 @@ export async function openDriveBrowser(page: Page, mockIndex = true) {
         if (await dialog.isVisible()) return;
         await page.keyboard.press('Escape');
         await page.getByRole('menuitem', { name: 'File', exact: true }).press('Enter');
-        const entry = page.getByRole('menuitem', { name: 'Open from GDrive', exact: true });
+        const entry = page.getByRole('menuitem', { name: /^Open…/ });
         await expect(entry).toBeVisible({ timeout: 500 });
         await entry.press('Enter');
+        await page
+            .getByRole('dialog', { name: 'Open', exact: true })
+            .getByRole('button', { name: /^GDrive/ })
+            .click();
         await expect(dialog).toBeVisible({ timeout: 500 });
     }).toPass({ timeout: 8000, intervals: [100, 250, 500] });
     await expect(dialog).toBeVisible();
@@ -39,6 +43,6 @@ export async function openDriveBrowser(page: Page, mockIndex = true) {
 export async function closeDriveBrowser(page: Page) {
     const dialog = page.getByRole('dialog', { name: 'Open from GDrive', exact: true });
     if (await dialog.isVisible())
-        await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+        await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(dialog).toBeHidden();
 }

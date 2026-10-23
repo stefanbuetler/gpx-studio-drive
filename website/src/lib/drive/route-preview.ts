@@ -211,6 +211,7 @@ export async function createRoutePreview(
         await waitFor(renderer, 'idle');
         ctx.drawImage(renderer.getCanvas(), 0, 0, 1200, 500);
         attribution = `MapLibre · ${attribution || '© OpenStreetMap contributors'}`;
+        if (/OpenStreetMap/i.test(attribution)) attribution += ' · openstreetmap.org/copyright';
     } catch {
         // Offline/custom-tile failures still yield a real outline of this route.
         attribution = 'Route overview';
@@ -289,8 +290,14 @@ export async function createRoutePreview(
     ctx.font = '22px Arial,sans-serif';
     text(ctx, description, 32, 581, 1136);
     ctx.fillStyle = '#666666';
-    ctx.font = '12px Arial,sans-serif';
-    text(ctx, attribution, 32, 613, 1136);
+    // Static images cannot link credits; keep the copyright URL and every provider
+    // name visible instead of truncating the attribution with an ellipsis.
+    let creditSize = 12;
+    do {
+        ctx.font = `${creditSize}px Arial,sans-serif`;
+        creditSize -= 0.5;
+    } while (ctx.measureText(attribution).width > 1136 && creditSize >= 6);
+    ctx.fillText(attribution, 32, 613, 1136);
     let image = canvas.toDataURL('image/jpeg', 0.84);
     if (image.length > 740000) image = canvas.toDataURL('image/jpeg', 0.6);
     if (image.length > 740000) image = canvas.toDataURL('image/jpeg', 0.4);

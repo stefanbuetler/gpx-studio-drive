@@ -15,7 +15,7 @@ export const exportState = $state({
     current: ExportState.NONE,
 });
 
-async function exportFiles(fileIds: string[], exclude: string[]) {
+export async function exportFiles(fileIds: string[], exclude: string[]) {
     if (fileIds.length > 1) {
         await exportFilesAsZip(fileIds, exclude);
     } else {

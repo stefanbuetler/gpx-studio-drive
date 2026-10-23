@@ -5,6 +5,8 @@
 
 **trail-explorer** is a fork of [gpx.studio](https://gpx.studio) for creating and editing GPX files, with GDrive storage, public links and embeds. It keeps the original editor design.
 
+Original GPX editor by **gpx.studio and its contributors**. This is an independently maintained fork, not an official gpx.studio release. See [LICENSE](LICENSE) for the original MIT copyright and permission notice.
+
 Branding preview branch: `codex/trail-explorer-branding`. Main and production are maintained separately. The original project’s MIT license and acknowledgments are retained.
 
 ![gpx.studio screenshot](website/src/lib/assets/img/docs/getting-started/interface.webp)

@@ -1,6 +1,17 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 
-export const driveFolderOpen = writable(false);
+export const fileDestination = writable<{ mode: 'open' | 'save'; localId?: string } | null>(null);
+export type CloudFile = { provider: 'gdrive'; account: string; remoteName: string; dirty: boolean };
+export const cloudSaveStatus = writable<
+    Record<string, { state: 'saving' | 'saved' | 'error'; message?: string }>
+>({});
+export const cloudCloseGuard = writable<(ids: string[]) => Promise<boolean>>(async () => true);
+export const cloudFiles = writable<Record<string, CloudFile>>({});
+export function saveOpenFile(id: string, asCopy = false) {
+    const actions = get(driveLocalActions)[id];
+    if (!asCopy && get(cloudFiles)[id]) actions?.save?.();
+    else setTimeout(() => fileDestination.set({ mode: 'save', localId: id }), 0);
+}
 export const driveBrowserOpen = writable(false);
 export const driveLocalActions = writable<
     Record<
@@ -9,6 +20,8 @@ export const driveLocalActions = writable<
             busy: boolean;
             save?: () => void;
             share?: () => void;
+            saveAs?: () => void;
+            remoteName?: string;
         }
     >
 >({});
@@ -17,8 +30,9 @@ export type DriveAccount = { displayName?: string; emailAddress?: string };
 export const driveAccount = writable<DriveAccount | null>(null);
 export const driveBatchActions = writable<{
     busy: boolean;
-    saveAll?: () => void;
     disconnect?: () => void;
+    saveAll?: (ids: string[]) => void;
+    connect?: () => void;
 }>({
     busy: false,
 });

@@ -68,7 +68,22 @@ export class SortableFileList {
             group: {
                 name: String(sortableLevel),
                 pull: allowedMoves[sortableLevel].map(String),
-                put: true,
+                put: (_to, from) => {
+                    const sourceLevel = Number(
+                        (from.options.group as { name?: string })?.name
+                    ) as ListLevel;
+                    if (!allowedMoves[sourceLevel]?.includes(sortableLevel)) return false;
+                    // Storage groups constrain whole-file reordering, not edits to
+                    // tracks or POIs inside the working copies.
+                    if (sortableLevel !== ListLevel.FILE) return true;
+                    const destination = container
+                        .closest('[data-file-group]')
+                        ?.getAttribute('data-file-group');
+                    const source = from.el
+                        .closest('[data-file-group]')
+                        ?.getAttribute('data-file-group');
+                    return !destination || !source || destination === source;
+                },
             },
             direction: orientation,
             forceAutoScrollFallback: true,
@@ -121,7 +136,9 @@ export class SortableFileList {
                 fromItems = [fromItem.extend('waypoints')];
             } else {
                 let oldIndices: number[] =
-                    e.oldIndicies.length > 0 ? e.oldIndicies.map((i) => i.index) : [e.oldIndex ?? -1];
+                    e.oldIndicies.length > 0
+                        ? e.oldIndicies.map((i) => i.index)
+                        : [e.oldIndex ?? -1];
                 oldIndices = oldIndices.filter((i) => i >= 0);
                 oldIndices.sort((a, b) => a - b);
 
@@ -136,7 +153,9 @@ export class SortableFileList {
                 }
 
                 let newIndices: number[] =
-                    e.newIndicies.length > 0 ? e.newIndicies.map((i) => i.index) : [e.newIndex ?? -1];
+                    e.newIndicies.length > 0
+                        ? e.newIndicies.map((i) => i.index)
+                        : [e.newIndex ?? -1];
                 newIndices = newIndices.filter((i) => i >= 0);
                 newIndices.sort((a, b) => a - b);
 
@@ -156,6 +175,7 @@ export class SortableFileList {
     }
 
     updateFromSelection() {
+        if (!this._sortable) return;
         const changed = this.getChangedIds();
         if (changed.length === 0) {
             return;
@@ -187,7 +207,10 @@ export class SortableFileList {
             return;
         }
         selection.update(($selection) => {
-            $selection.clear();
+            if (
+                !(e.originalEvent?.ctrlKey || e.originalEvent?.metaKey || e.originalEvent?.shiftKey)
+            )
+                $selection.clear();
             Object.entries(this._elements).forEach(([id, element]) => {
                 $selection.set(
                     this._item.extend(this.getRealId(id)),
@@ -238,8 +261,16 @@ export class SortableFileList {
             fileOrder_.length !== sortableOrder.length ||
             fileOrder_.some((value, index) => value !== sortableOrder[index])
         ) {
-            fileOrder.set(sortableOrder);
+            // Reorder this storage group without dropping files in other groups.
+            const present = new Set(sortableOrder);
+            let index = 0;
+            const next = fileOrder_.map((id) => (present.has(id) ? sortableOrder[index++] : id));
+            fileOrder.set([...next, ...sortableOrder.filter((id) => !next.includes(id))]);
         }
+    }
+
+    updateNode(node: typeof this._node) {
+        this._node = node;
     }
 
     updateElements() {
@@ -259,6 +290,7 @@ export class SortableFileList {
     }
 
     destroy() {
+        this._sortable?.destroy();
         this._sortable = null;
         this._unsubscribes.forEach((unsubscribe) => unsubscribe());
         this._unsubscribes = [];

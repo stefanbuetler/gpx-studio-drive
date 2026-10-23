@@ -10,6 +10,7 @@ export type SavedRoute = {
     folderId: string;
     remote: DriveGPXFile;
     hash: string;
+    localName?: string;
 };
 const database = new Dexie('TrailExplorerSavedRoutes');
 database.version(1).stores({ routes: '&key,account' });
@@ -45,6 +46,13 @@ export async function readSavedRoute(key: string): Promise<SavedRoute | undefine
 
 export async function writeSavedRoute(saved: SavedRoute): Promise<boolean> {
     memory.set(saved.key, saved);
+    // Keep the source with the working copy, so disconnect/reload never relabels
+    // a cloud file as local. Identity checks keep duplicates independent.
+    await db.transaction('rw', db.files, async () => {
+        const file = await db.files.get(saved.localId);
+        if (file?._data.driveIdentity === saved.identity)
+            await db.files.update(saved.localId, { '_data.cloudLink': saved });
+    });
     try {
         await routes.put(saved);
         return true;

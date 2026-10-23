@@ -3,3 +3,6 @@
 .dev.vars.*
 !.dev.vars.example
 .wrangler/
+
+# Generated during the website build from installed dependency licenses.
+website/static/THIRD_PARTY_NOTICES.txt

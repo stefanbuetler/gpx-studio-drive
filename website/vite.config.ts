@@ -8,16 +8,23 @@ import { driveSessionDevPlugin } from './dev-drive-session';
 export default defineConfig({
     envPrefix: ['VITE_', 'PUBLIC_'],
     server: {
-        proxy: Object.fromEntries(
-            Object.entries(serviceHosts).map(([name, target]) => [
-                `/__gpx_services/${name}/`,
-                {
-                    target,
-                    changeOrigin: true,
-                    rewrite: (path: string) => path.replace(`/__gpx_services/${name}`, ''),
-                },
-            ])
-        ),
+        proxy: {
+            '/api/pois': {
+                target: 'https://overpass.gpx.studio',
+                changeOrigin: true,
+                rewrite: (path: string) => path.replace('/api/pois', '/api/interpreter'),
+            },
+            ...Object.fromEntries(
+                Object.entries(serviceHosts).map(([name, target]) => [
+                    `/__gpx_services/${name}/`,
+                    {
+                        target,
+                        changeOrigin: true,
+                        rewrite: (path: string) => path.replace(`/__gpx_services/${name}`, ''),
+                    },
+                ])
+            ),
+        },
     },
     ssr: {
         noExternal: ['gpx'],

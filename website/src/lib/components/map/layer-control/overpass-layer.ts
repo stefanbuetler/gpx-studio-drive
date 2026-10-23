@@ -24,7 +24,12 @@ liveQuery(() => db.overpassdata.toArray()).subscribe((pois) => {
 });
 
 export class OverpassLayer {
-    overpassUrl = 'https://overpass.gpx.studio/api/interpreter';
+    overpassUrl = '/api/pois';
+    status = writable({ zoomRequired: true, loading: false, error: '' });
+    private generation = 0;
+    private removed = false;
+    private error = '';
+    private controllers = new Set<AbortController>();
     minZoom = 12;
     queryZoom = 12;
     expirationTime = 7 * 24 * 3600 * 1000;
@@ -66,12 +71,24 @@ export class OverpassLayer {
     }
 
     queryIfNeeded() {
+        this.generation++;
+        this.nextQueries.clear();
+        this.error = '';
+        this.updateStatus();
         if (this.map.getZoom() >= this.minZoom) {
             const bounds = this.map.getBounds()?.toArray();
             if (bounds) {
                 this.query([bounds[0][0], bounds[0][1], bounds[1][0], bounds[1][1]]);
             }
         }
+    }
+
+    updateStatus() {
+        this.status.set({
+            zoomRequired: this.map.getZoom() < this.minZoom,
+            loading: this.currentQueries.size > 0 || this.nextQueries.size > 0,
+            error: this.error,
+        });
     }
 
     update() {
@@ -122,6 +139,11 @@ export class OverpassLayer {
     }
 
     remove() {
+        this.removed = true;
+        this.generation++;
+        this.nextQueries.clear();
+        this.controllers.forEach((controller) => controller.abort());
+        this.popup.remove();
         this.map.off('moveend', this.queryIfNeededBinded);
         this.map.off('style.load', this.updateBinded);
         this.layerEventManager.off('mouseenter', 'overpass', this.onHoverBinded);
@@ -151,6 +173,7 @@ export class OverpassLayer {
     }
 
     query(bbox: [number, number, number, number]) {
+        const generation = this.generation;
         let queries = getCurrentQueries();
         if (queries.length === 0) {
             return;
@@ -161,57 +184,79 @@ export class OverpassLayer {
 
         for (let x = tileLimits.minX; x <= tileLimits.maxX; x++) {
             for (let y = tileLimits.minY; y <= tileLimits.maxY; y++) {
-                if (this.currentQueries.has(`${x},${y}`)) {
-                    continue;
-                }
-
                 db.overpasstiles
                     .where('[x+y]')
                     .equals([x, y])
                     .toArray()
                     .then((querytiles) => {
+                        if (generation !== this.generation || this.removed || this.error) return;
                         let missingQueries = queries.filter(
                             (query) =>
                                 !querytiles.some(
                                     (querytile) =>
-                                        querytile.query === query &&
+                                        querytile.query === tileCacheKey(query) &&
                                         time - querytile.time < this.expirationTime
                                 )
                         );
                         if (missingQueries.length > 0) {
-                            this.queryTile(x, y, missingQueries);
+                            this.nextQueries.set(`${x},${y}`, { x, y, queries: missingQueries });
+                            this.drainQueue();
                         }
                     });
             }
         }
     }
 
-    queryTile(x: number, y: number, queries: string[]) {
-        if (this.currentQueries.size > 5) {
-            return;
+    drainQueue() {
+        if (this.removed || this.error) return;
+        while (this.currentQueries.size < 2 && this.nextQueries.size > 0) {
+            const next = [...this.nextQueries.entries()].find(
+                ([key]) => !this.currentQueries.has(key)
+            );
+            if (!next) break;
+            const [key, tile] = next;
+            this.nextQueries.delete(key);
+            void this.queryTile(tile.x, tile.y, tile.queries);
         }
-
-        this.currentQueries.add(`${x},${y}`);
-
-        const bounds = mercator.bbox(x, y, this.queryZoom);
-        fetch(`${this.overpassUrl}?data=${getQueryForBounds(bounds, queries)}`)
-            .then(
-                (response) => {
-                    if (response.ok) {
-                        return response.json();
-                    }
-                    this.currentQueries.delete(`${x},${y}`);
-                    return Promise.reject();
-                },
-                () => this.currentQueries.delete(`${x},${y}`)
-            )
-            .then((data) => this.storeOverpassData(x, y, queries, data))
-            .catch(() => this.currentQueries.delete(`${x},${y}`));
+        this.updateStatus();
     }
 
-    storeOverpassData(x: number, y: number, queries: string[], data: any) {
+    async queryTile(x: number, y: number, queries: string[]) {
+        const generation = this.generation;
+        const key = `${x},${y}`;
+        this.currentQueries.add(key);
+        const controller = new AbortController();
+        this.controllers.add(controller);
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        try {
+            const bounds = mercator.bbox(x, y, this.queryZoom);
+            const response = await fetch(
+                `${this.overpassUrl}?${new URLSearchParams({ data: getQueryForBounds(bounds, queries) })}`,
+                { signal: controller.signal, credentials: 'omit' }
+            );
+            if (!response.ok) throw new Error(`POI service returned ${response.status}`);
+            const result = await response.json();
+            if (!Array.isArray(result.elements) || result.remark) {
+                throw new Error('POI service returned an incomplete response');
+            }
+            await this.storeOverpassData(x, y, queries, result);
+        } catch {
+            if (!this.removed && generation === this.generation) {
+                this.error = 'Could not load points of interest. Please try again.';
+                this.nextQueries.clear();
+            }
+        } finally {
+            clearTimeout(timeout);
+            this.controllers.delete(controller);
+            this.currentQueries.delete(key);
+            this.drainQueue();
+            this.updateStatus();
+        }
+    }
+
+    async storeOverpassData(x: number, y: number, queries: string[], data: any) {
         let time = Date.now();
-        let queryTiles = queries.map((query) => ({ x, y, query, time }));
+        let queryTiles = queries.map((query) => ({ x, y, query: tileCacheKey(query), time }));
         let pois: { query: string; id: number; poi: GeoJSON.Feature }[] = [];
 
         if (data.elements === undefined) {
@@ -247,12 +292,10 @@ export class OverpassLayer {
             }
         }
 
-        db.transaction('rw', db.overpasstiles, db.overpassdata, async () => {
+        await db.transaction('rw', db.overpasstiles, db.overpassdata, async () => {
             await db.overpasstiles.bulkPut(queryTiles);
             await db.overpassdata.bulkPut(pois);
         });
-
-        this.currentQueries.delete(`${x},${y}`);
     }
 
     loadIcons() {
@@ -273,7 +316,7 @@ export class OverpassLayer {
 }
 
 function getQueryForBounds(bounds: [number, number, number, number], queries: string[]) {
-    return `[bbox:${bounds[1]},${bounds[0]},${bounds[3]},${bounds[2]}][out:json];(${getQueries(queries)});out center;`;
+    return `[timeout:20][bbox:${bounds[1]},${bounds[0]},${bounds[3]},${bounds[2]}][out:json];(${getQueries(queries)});out center;`;
 }
 
 function getQueries(queries: string[]) {
@@ -317,6 +360,7 @@ function belongsToQuery(element: any, query: string) {
 }
 
 function belongsToQueryItem(element: any, tags: Record<string, string | string[]>) {
+    if (!element.tags) return false;
     return Object.entries(tags).every(([tag, value]) =>
         Array.isArray(value) ? value.includes(element.tags[tag]) : element.tags[tag] === value
     );
@@ -331,4 +375,9 @@ function getCurrentQueries() {
     return Object.entries(getLayers(currentQueries))
         .filter(([_, selected]) => selected)
         .map(([query, _]) => query);
+}
+
+// Re-fetch Water tiles cached before support for all drinking_water=yes facilities.
+function tileCacheKey(query: string) {
+    return query === 'water' ? 'water-v2' : query;
 }

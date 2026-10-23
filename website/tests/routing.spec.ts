@@ -116,3 +116,48 @@ test('drawing a route in the editor requests routed points through localhost', a
     );
     await expect(page.getByText('Failed to fetch', { exact: true })).toHaveCount(0);
 });
+
+test('production routing and elevation use the app origin while unrelated services remain unchanged', async ({
+    page,
+}) => {
+    const urls = await page.evaluate(async () => {
+        const path = '/src/lib/service-url.ts';
+        const { serviceURL } = await import(/* @vite-ignore */ path);
+        return [
+            serviceURL('https://graphhopper.gpx.studio/route', false),
+            serviceURL('https://tiles.gpx.studio/mapterhorn/12/2145/1434.webp', false),
+            serviceURL('https://styles.gpx.studio/liberty-topo.json', false),
+            serviceURL('https://graphhopper.gpx.studio.example.com/route', false),
+        ];
+    });
+    expect(urls).toEqual([
+        'http://localhost:5173/__gpx_services/graphhopper/route',
+        'http://localhost:5173/__gpx_services/tiles/mapterhorn/12/2145/1434.webp',
+        'https://styles.gpx.studio/liberty-topo.json',
+        'https://graphhopper.gpx.studio.example.com/route',
+    ]);
+});
+
+test('routing outages and server errors without hints show their useful message', async ({
+    page,
+}) => {
+    await page.route('**/__gpx_services/graphhopper/route', (r) =>
+        r.fulfill({
+            status: 502,
+            json: { message: 'Routing service could not be reached. Please try again.' },
+        })
+    );
+    const error = await page.evaluate(async () => {
+        const path = '/src/lib/components/toolbar/tools/routing/routing.ts';
+        const { route } = await import(/* @vite-ignore */ path);
+        try {
+            await route([
+                { lon: 8.54, lat: 47.37 },
+                { lon: 8.541, lat: 47.371 },
+            ]);
+        } catch (error) {
+            return (error as Error).message;
+        }
+    });
+    expect(error).toBe('Routing service could not be reached. Please try again.');
+});

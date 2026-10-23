@@ -7,15 +7,30 @@
         open = $bindable(false),
         file,
         onshare,
+        dirty = false,
+        onsave,
     }: {
         open: boolean;
         file: DriveGPXFile;
         onshare: (file: DriveGPXFile) => Promise<string>;
+        dirty?: boolean;
+        onsave?: () => Promise<void>;
     } = $props();
     let busy = $state(false);
     let link = $state('');
     let error = $state('');
     let notice = $state('');
+    async function saveEdits() {
+        busy = true;
+        error = '';
+        try {
+            await onsave?.();
+        } catch (e) {
+            error = e instanceof Error ? e.message : String(e);
+        } finally {
+            busy = false;
+        }
+    }
     async function publish() {
         busy = true;
         error = '';
@@ -54,13 +69,22 @@
             <Dialog.Description>{file.name}</Dialog.Description>
         </Dialog.Header>
         {#if !link}
+            {#if dirty}
+                <div class="rounded-md border p-3 text-sm space-y-2">
+                    <p>
+                        You have unsaved changes. Save to GDrive before sharing your updated route.
+                    </p>
+                    <Button onclick={saveEdits} disabled={busy}>Save changes to GDrive</Button>
+                </div>
+            {/if}
             <p>
                 Anyone with this link will be able to view and download this GPX file without
                 signing in. They cannot overwrite your original through the link.
             </p>
             <p class="text-sm text-muted-foreground">
-                Your local route will be saved to your chosen GDrive folder first. Only that saved
-                copy will be shared. Future saves to it will appear at the same link.
+                This shares the version saved in GDrive. Local edits are not uploaded by sharing;
+                save them to GDrive first if you want to include them. Future saves to this file
+                will appear at the same link.
             </p>
             <p class="text-sm text-muted-foreground">
                 The link and embed will use your current map layer, overlays, markers, units, theme,
@@ -76,7 +100,7 @@
                 <Button variant="outline" disabled={busy} onclick={() => (open = false)}
                     >Cancel</Button
                 >
-                <Button disabled={busy} onclick={publish}
+                <Button disabled={busy || dirty} onclick={publish}
                     >{busy ? 'Creating public link…' : 'Make public and create link'}</Button
                 >
             </Dialog.Footer>

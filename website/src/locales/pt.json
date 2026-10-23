@@ -538,7 +538,7 @@
         "title": "Criar o seu próprio mapa",
         "maptiler_key": "MapTiler key (optional, only required for MapTiler maps)",
         "file_urls": "Ficheiros URLs (separados por vírgulas)",
-        "drive_ids": "‘IDs’ de ficheiro Google Drive (separados por vírgulas)",
+        "drive_ids": "‘IDs’ de ficheiro GDrive (separados por vírgulas)",
         "basemap": "Mapa-base",
         "height": "Altura",
         "fill_by": "Preencher por",

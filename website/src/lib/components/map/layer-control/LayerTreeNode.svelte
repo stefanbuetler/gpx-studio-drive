@@ -53,7 +53,12 @@
                             id="{name}-{id}"
                             {name}
                             value={id}
-                            bind:checked={checked[id]}
+                            bind:checked={
+                                () => checked[id] === true,
+                                (value) => {
+                                    checked[id] = value;
+                                }
+                            }
                             class="scale-90"
                             aria-label={i18n._(`layers.label.${id}`)}
                         />
@@ -90,12 +95,20 @@
                 {#snippet content()}
                     <div class="ml-2">
                         <Self
-                            node={node[id]}
+                            node={node[id] as LayerTreeType}
                             {name}
                             {selected}
                             {onselect}
                             {multiple}
-                            bind:checked={checked[id]}
+                            bind:checked={
+                                () =>
+                                    typeof checked[id] === 'object'
+                                        ? (checked[id] as LayerTreeType)
+                                        : {},
+                                (value) => {
+                                    checked[id] = value;
+                                }
+                            }
                         />
                     </div>
                 {/snippet}

@@ -1,9 +1,15 @@
 import fs from 'fs';
+import { loadEnv } from 'vite';
+const appOrigin = new URL(
+    process.env.PUBLIC_APP_URL ||
+        loadEnv('', process.cwd(), 'PUBLIC_').PUBLIC_APP_URL ||
+        'http://localhost:5173'
+).origin;
 import { glob } from 'glob';
 import { languages } from '$lib/languages';
 
 function getURLForLanguage(lang: string, path: string): string {
-    return `https://gpx.studio${lang === 'en' ? '' : `/${lang}`}${path}`;
+    return `${appOrigin}${lang === 'en' ? '' : `/${lang}`}${path}`;
 }
 
 function generateSitemap() {
@@ -47,3 +53,9 @@ function generateSitemap() {
 }
 
 fs.writeFileSync('build/sitemap.xml', generateSitemap());
+fs.writeFileSync(
+    'build/robots.txt',
+    fs
+        .readFileSync('static/robots.txt', 'utf8')
+        .replace(/Sitemap: .*/, `Sitemap: ${appOrigin}/sitemap.xml`)
+);

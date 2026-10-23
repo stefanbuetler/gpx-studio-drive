@@ -88,7 +88,8 @@ export class ExtensionAPI {
             overlayTree.overlays[overlay.extensionName] = {};
         }
 
-        overlayTree.overlays[overlay.extensionName][overlay.id] = true;
+        const group = overlayTree.overlays[overlay.extensionName];
+        if (typeof group !== 'boolean') group[overlay.id] = true;
 
         selectedOverlayTree.update((selected) => {
             if (!selected.overlays.hasOwnProperty(overlay.extensionName)) {

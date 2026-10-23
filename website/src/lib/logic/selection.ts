@@ -105,12 +105,17 @@ export class Selection {
     }
 
     selectFileWhenLoaded(fileId: string) {
-        const unsubscribe = fileStateCollection.subscribe((files) => {
+        let loaded = false;
+        let unsubscribe: (() => void) | undefined;
+        unsubscribe = fileStateCollection.subscribe((files) => {
             if (files.has(fileId)) {
+                loaded = true;
                 this.selectFile(fileId);
-                unsubscribe();
+                unsubscribe?.();
             }
         });
+        // Stores immediately deliver their current value, before subscribe returns.
+        if (loaded) unsubscribe();
     }
 
     set(items: ListItem[]) {

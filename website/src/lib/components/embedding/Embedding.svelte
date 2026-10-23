@@ -6,6 +6,7 @@
     import Map from '$lib/components/map/Map.svelte';
     import LayerControl from '$lib/components/map/layer-control/LayerControl.svelte';
     import OpenIn from '$lib/components/embedding/OpenIn.svelte';
+    import { downloadPublicGPX } from '$lib/drive/public';
     import { writable } from 'svelte/store';
     import type { GPXFile } from 'gpx';
     import {
@@ -21,6 +22,8 @@
     import { selection } from '$lib/logic/selection';
     import { untrack } from 'svelte';
     import { isSelected, toggle } from '$lib/components/map/layer-control/utils';
+    import { map } from '$lib/components/map/map';
+    import { applySharedLayers } from '$lib/drive/sharing';
     import { boundsManager } from '$lib/logic/bounds';
 
     let {
@@ -29,6 +32,9 @@
         hash = $bindable(),
     }: { useHash?: boolean; options: EmbeddingOptions; hash: string } = $props();
 
+    let loading = $state(false);
+    let loadError = $state('');
+    let loadVersion = 0;
     let additionalDatasets = writable<string[]>([]);
     let elevationFill = writable<'slope' | 'surface' | 'highway' | undefined>(undefined);
 
@@ -45,43 +51,49 @@
 
     settings.initialize();
 
-    function applyOptions() {
-        if (allowedEmbeddingBasemaps.includes(options.basemap)) {
-            $currentBasemap = options.basemap;
-        }
-        if (!isSelected($selectedBasemapTree, options.basemap)) {
-            $selectedBasemapTree = toggle($selectedBasemapTree, options.basemap);
-        }
-        $distanceMarkers = options.distanceMarkers;
-        $directionMarkers = options.directionMarkers;
-        $distanceUnits = options.distanceUnits;
-        $velocityUnits = options.velocityUnits;
-        $temperatureUnits = options.temperatureUnits;
-        if (options.theme != 'system') {
-            setMode(options.theme);
-        }
-
-        additionalDatasets.set(
-            [
-                options.elevation.speed ? 'speed' : null,
-                options.elevation.hr ? 'hr' : null,
-                options.elevation.cad ? 'cad' : null,
-                options.elevation.temp ? 'temp' : null,
-                options.elevation.power ? 'power' : null,
-            ].filter((dataset) => dataset !== null)
-        );
-        elevationFill.set(options.elevation.fill == 'none' ? undefined : options.elevation.fill);
-
-        let downloads: Promise<GPXFile | null>[] = getFilesFromEmbeddingOptions(options).map(
-            (url) => {
-                return fetch(url)
-                    .then((response) => response.blob())
-                    .then((blob) => new File([blob], url.split('/').pop() ?? url))
-                    .then(loadFile);
+    async function applyOptions() {
+        const version = ++loadVersion;
+        loading = true;
+        loadError = '';
+        try {
+            applySharedLayers(options);
+            if (
+                allowedEmbeddingBasemaps.includes(options.basemap) ||
+                options.customLayers[options.basemap]
+            ) {
+                $currentBasemap = options.basemap;
             }
-        );
-        Promise.all(downloads).then((answers) => {
-            const files = answers.filter((file) => file !== null) as GPXFile[];
+            if (!isSelected($selectedBasemapTree, options.basemap)) {
+                $selectedBasemapTree = toggle($selectedBasemapTree, options.basemap);
+            }
+            $distanceMarkers = options.distanceMarkers;
+            $directionMarkers = options.directionMarkers;
+            $distanceUnits = options.distanceUnits;
+            $velocityUnits = options.velocityUnits;
+            $temperatureUnits = options.temperatureUnits;
+            setMode(options.theme);
+
+            additionalDatasets.set(
+                [
+                    options.elevation.speed ? 'speed' : null,
+                    options.elevation.hr ? 'hr' : null,
+                    options.elevation.cad ? 'cad' : null,
+                    options.elevation.temp ? 'atemp' : null,
+                    options.elevation.power ? 'power' : null,
+                ].filter((dataset) => dataset !== null)
+            );
+            elevationFill.set(
+                options.elevation.fill == 'none' ? undefined : options.elevation.fill
+            );
+
+            const files = (
+                await Promise.all(
+                    getFilesFromEmbeddingOptions(options).map(async (url) =>
+                        loadFile(await downloadPublicGPX(url))
+                    )
+                )
+            ).filter((file): file is GPXFile => file !== null);
+            if (version !== loadVersion) return;
             let ids: string[] = [];
             files.forEach((file, index) => {
                 let id = `gpx-${index}-embed`;
@@ -91,8 +103,18 @@
             fileStateCollection.setEmbeddedFiles(files);
             $fileOrder = ids;
             selection.selectAll();
-            boundsManager.fitBoundsOnLoad(ids);
-        });
+            map.onLoad(() => {
+                boundsManager.fitBoundsOnLoad(ids, {
+                    pitch: options.pitch,
+                    bearing: options.bearing,
+                });
+            });
+        } catch (error) {
+            if (version === loadVersion)
+                loadError = error instanceof Error ? error.message : 'Could not load this route.';
+        } finally {
+            if (version === loadVersion) loading = false;
+        }
     }
 
     $effect(() => {
@@ -102,6 +124,18 @@
 </script>
 
 <div class="absolute flex flex-col h-full w-full border rounded-xl overflow-clip">
+    {#if loading}<p
+            class="absolute left-1/2 top-4 -translate-x-1/2 z-40 rounded bg-background p-3 shadow"
+            role="status"
+        >
+            Loading shared route…
+        </p>{/if}
+    {#if loadError}<p
+            class="absolute left-1/2 top-16 -translate-x-1/2 z-40 rounded bg-background p-3 shadow max-w-md"
+            role="alert"
+        >
+            {loadError}
+        </p>{/if}
     <div class="grow relative">
         <Map
             class="h-full {$fileStateCollection.size > 1 ? 'horizontal' : ''}"
@@ -110,7 +144,7 @@
             geolocate={true}
             hash={useHash}
         />
-        <OpenIn files={options.files} ids={options.ids} />
+        <OpenIn files={options.files} ids={options.ids} resourceKeys={options.resourceKeys} />
         <LayerControl />
         <GPXLayers />
         {#if $fileStateCollection.size > 1}

@@ -1,0 +1,43 @@
+{
+  "name": "gpx-studio-drive",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-19",
+  "routes": [
+    { "pattern": "gpx.trailexplorer.net", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./website/build",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/drive/*",
+      "/api/share",
+      "/api/pois",
+      "/__gpx_services/*",
+      "/s/*"
+    ]
+  },
+  "vars": {
+    "DRIVE_ALLOWED_ORIGINS": "https://gpx.trailexplorer.net,https://gpx-studio-drive.stefan-buetler.workers.dev"
+  },
+  "d1_databases": [
+    {
+      "binding": "SHARE_LINKS",
+      "database_name": "trail-explorer-share-links-preview",
+      "database_id": "15070d30-fc0d-4672-a7ce-8fd0b6cb1754",
+      "migrations_dir": "worker/migrations"
+    }
+  ],
+  "previews": {
+    "vars": {
+      "DRIVE_ALLOWED_ORIGINS": "https://feature-google-drive-integration-gpx-studio-drive.stefan-buetler.workers.dev"
+    },
+    "d1_databases": [
+      {
+        "binding": "SHARE_LINKS",
+        "database_name": "trail-explorer-share-links-preview",
+        "database_id": "15070d30-fc0d-4672-a7ce-8fd0b6cb1754",
+        "migrations_dir": "worker/migrations"
+      }
+    ]
+  }
+}

@@ -66,7 +66,7 @@
             </Button>
         {:else if embeddedApp}
             <p>The app cannot be embedded in an iframe.</p>
-            <Button href="https://gpx.studio/help/integration" target="_blank">
+            <Button href="./help/integration" target="_blank">
                 Learn how to create a map for your website
             </Button>
         {/if}

@@ -538,7 +538,7 @@
         "title": "Créez votre propre carte",
         "maptiler_key": "Clé MapTiler (optionnelle, uniquement nécessaire pour les cartes MapTiler)",
         "file_urls": "URLs des fichiers (séparées par des virgules)",
-        "drive_ids": "IDs des fichiers Google Drive (séparés par des virgules)",
+        "drive_ids": "IDs des fichiers GDrive (séparés par des virgules)",
         "basemap": "Fond de carte",
         "height": "Hauteur",
         "fill_by": "Remplir selon",

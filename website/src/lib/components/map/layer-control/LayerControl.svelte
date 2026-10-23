@@ -7,6 +7,10 @@
     import { Layers } from '@lucide/svelte';
     import { settings } from '$lib/logic/settings';
     import { map } from '$lib/components/map/map';
+    import { onDestroy } from 'svelte';
+    import { writable } from 'svelte/store';
+    const poiStatus = writable({ zoomRequired: true, loading: false, error: '' });
+    let unsubscribeStatus: (() => void) | undefined;
     import type { Map } from 'maplibre-gl';
 
     let container: HTMLDivElement;
@@ -27,7 +31,14 @@
             overpassLayer.remove();
         }
         overpassLayer = new OverpassLayer(_map, map.layerEventManager!);
+        unsubscribeStatus?.();
+        unsubscribeStatus = overpassLayer.status.subscribe(poiStatus.set);
         overpassLayer.add();
+    });
+
+    onDestroy(() => {
+        unsubscribeStatus?.();
+        overpassLayer?.remove();
     });
 
     let open = $state(false);
@@ -102,6 +113,28 @@
                                 multiple={true}
                                 bind:checked={$currentOverpassQueries}
                             />
+                            {#if $poiStatus.zoomRequired}
+                                <p class="mt-2 max-w-56 text-xs text-muted-foreground">
+                                    Zoom in to level 12 to see points of interest.
+                                    <button
+                                        class="underline"
+                                        onclick={() => overpassLayer.map.easeTo({ zoom: 12 })}
+                                        >Zoom in</button
+                                    >
+                                </p>
+                            {:else if $poiStatus.error}
+                                <p role="status" class="mt-2 max-w-56 text-xs text-destructive">
+                                    {$poiStatus.error}
+                                    <button
+                                        class="underline"
+                                        onclick={() => overpassLayer.queryIfNeeded()}>Retry</button
+                                    >
+                                </p>
+                            {:else if $poiStatus.loading}
+                                <p role="status" class="mt-2 text-xs text-muted-foreground">
+                                    Loading points of interest…
+                                </p>
+                            {/if}
                         {/if}
                     </div>
                 </div>

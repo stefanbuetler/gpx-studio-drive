@@ -538,7 +538,7 @@
         "title": "Lag ditt eget kart",
         "maptiler_key": "MapTiler key (optional, only required for MapTiler maps)",
         "file_urls": "Fil URL'er (adskilt med komma)",
-        "drive_ids": "Google Drive fil-ID'er (separert med komma)",
+        "drive_ids": "GDrive fil-ID'er (separert med komma)",
         "basemap": "Basiskart",
         "height": "Høyde",
         "fill_by": "Fyll ved",

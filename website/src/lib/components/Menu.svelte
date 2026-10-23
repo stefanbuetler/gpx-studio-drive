@@ -1,16 +1,29 @@
 <script lang="ts">
+    import {
+        fileDestination,
+        saveOpenFile,
+        driveAccount,
+        accountInitials,
+        driveLocalActions,
+        driveBatchActions,
+    } from '$lib/drive/browser';
+    import * as Dialog from '$lib/components/ui/dialog';
+    import ProjectCredit from '$lib/components/ProjectCredit.svelte';
+    let aboutOpen = $state(false);
     import * as Menubar from '$lib/components/ui/menubar/index.js';
     import { Button } from '$lib/components/ui/button';
+    import FileDestinationDialog from '$lib/components/FileDestinationDialog.svelte';
     import Logo from '$lib/components/Logo.svelte';
     import Shortcut from '$lib/components/Shortcut.svelte';
     import {
+        Share2,
+        LogOut,
+        Save,
         Plus,
-        Copy,
         Download,
         Undo2,
         Redo2,
         Trash2,
-        Heart,
         Map,
         Layers2,
         Box,
@@ -29,7 +42,7 @@
         File,
         View,
         FilePen,
-        HeartHandshake,
+        UserRound,
         PersonStanding,
         Eye,
         EyeOff,
@@ -49,7 +62,6 @@
     import { map } from '$lib/components/map/map';
     import { editMetadata } from '$lib/components/file-list/metadata/utils.svelte';
     import { editStyle } from '$lib/components/file-list/style/utils.svelte';
-    import { exportState, ExportState } from '$lib/components/export/utils.svelte';
     import { anySelectedLayer } from '$lib/components/map/layer-control/utils';
     import { defaultOverlays } from '$lib/assets/layers';
     import LayerControlSettings from '$lib/components/map/layer-control/LayerControlSettings.svelte';
@@ -60,13 +72,7 @@
     import { languages } from '$lib/languages';
     import { getURLForLanguage } from '$lib/utils';
     import { settings } from '$lib/logic/settings';
-    import {
-        createFile,
-        fileActions,
-        loadFiles,
-        pasteSelection,
-        triggerFileInput,
-    } from '$lib/logic/file-actions';
+    import { createFile, fileActions, loadFiles, pasteSelection } from '$lib/logic/file-actions';
     import { fileStateCollection } from '$lib/logic/file-state';
     import { fileActionManager } from '$lib/logic/file-action-manager';
     import { copied, selection } from '$lib/logic/selection';
@@ -90,6 +96,21 @@
         streetViewSource,
         routing,
     } = settings;
+
+    let closingSelection = $derived(
+        $selection.getSelected().some((item) => item instanceof ListFileItem)
+    );
+    let selectedSaveIds = $derived([
+        ...new Set(
+            $selection
+                .getSelected()
+                .map((item) => item.getFileId())
+                .filter((id) => !!$driveLocalActions[id])
+        ),
+    ]);
+    let selectedSave = $derived(
+        selectedSaveIds.length === 1 ? $driveLocalActions[selectedSaveIds[0]] : undefined
+    );
 
     const canUndo = fileActionManager.canUndo;
     const canRedo = fileActionManager.canRedo;
@@ -131,8 +152,8 @@
         class="w-fit flex flex-row items-center justify-center p-1 bg-background rounded-b-md md:rounded-md pointer-events-auto shadow-md"
     >
         <a href={getURLForLanguage(i18n.lang, '/')} target="_blank" class="shrink-0">
-            <Logo class="h-5 mt-0.5 mx-2 md:hidden" iconOnly={true} width="16" />
-            <Logo class="h-5 mt-0.5 mx-2 hidden md:block" width="96" />
+            <Logo class="h-5 mt-0.5 mx-2 md:hidden" iconOnly={true} width="20" />
+            <Logo class="h-5 mt-0.5 mx-2 hidden md:block" width="120" />
         </a>
         <Menubar.Root class="border-none shadow-none h-fit p-0">
             <Menubar.Menu>
@@ -141,60 +162,41 @@
                     <span class="hidden md:block">{i18n._('gpx.file')}</span>
                 </Menubar.Trigger>
                 <Menubar.Content class="border-none">
-                    <Menubar.Item onclick={createFile}>
-                        <Plus size="16" />
-                        {i18n._('menu.new')}
-                        <Shortcut key="+" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Separator />
-                    <Menubar.Item onclick={triggerFileInput}>
-                        <FolderOpen size="16" />
-                        {i18n._('menu.open')}
-                        <Shortcut key="O" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Separator />
-                    <Menubar.Item
-                        onclick={fileActions.duplicateSelection}
-                        disabled={$selection.size == 0}
+                    <Menubar.Item onclick={createFile}
+                        ><Plus size="16" />New<Shortcut key="+" ctrl={true} /></Menubar.Item
                     >
-                        <Copy size="16" />
-                        {i18n._('menu.duplicate')}
-                        <Shortcut key="D" ctrl={true} />
-                    </Menubar.Item>
+                    <Menubar.Item
+                        onclick={() => setTimeout(() => fileDestination.set({ mode: 'open' }), 0)}
+                        ><FolderOpen size="16" />Open…<Shortcut key="O" ctrl={true} /></Menubar.Item
+                    >
                     <Menubar.Separator />
                     <Menubar.Item
+                        aria-label="Save"
+                        disabled={$driveBatchActions.busy || !selectedSave}
+                        onclick={() => saveOpenFile(selectedSaveIds[0])}
+                    >
+                        <Save size="16" />Save<Shortcut key="S" ctrl={true} />
+                    </Menubar.Item>
+                    <Menubar.Item
+                        aria-label="Save as…"
+                        disabled={$driveBatchActions.busy || !selectedSave}
+                        onclick={() => saveOpenFile(selectedSaveIds[0], true)}
+                    >
+                        <Download size="16" />Save as…<Shortcut key="S" ctrl={true} shift={true} />
+                    </Menubar.Item>
+                    {#if selectedSave?.share}
+                        <Menubar.Item
+                            disabled={$driveBatchActions.busy}
+                            onclick={() => selectedSave?.share?.()}
+                            ><Share2 size="16" />Share…</Menubar.Item
+                        >
+                    {/if}
+                    <Menubar.Separator />
+                    <Menubar.Item
+                        disabled={$selection.size === 0}
                         onclick={() => tick().then(fileActions.deleteSelectedFiles)}
-                        disabled={$selection.size == 0}
+                        ><FileX size="16" />Close</Menubar.Item
                     >
-                        <FileX size="16" />
-                        {i18n._('menu.delete')}
-                        <Shortcut key="⌫" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Item
-                        onclick={fileActions.deleteAllFiles}
-                        disabled={fileStateCollection.size == 0}
-                    >
-                        <FileX size="16" />
-                        {i18n._('menu.delete_all')}
-                        <Shortcut key="⌫" ctrl={true} shift={true} />
-                    </Menubar.Item>
-                    <Menubar.Separator />
-                    <Menubar.Item
-                        onclick={() => (exportState.current = ExportState.SELECTION)}
-                        disabled={$selection.size == 0}
-                    >
-                        <Download size="16" />
-                        {i18n._('menu.export')}
-                        <Shortcut key="S" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Item
-                        onclick={() => (exportState.current = ExportState.ALL)}
-                        disabled={fileStateCollection.size == 0}
-                    >
-                        <Download size="16" />
-                        {i18n._('menu.export_all')}
-                        <Shortcut key="S" ctrl={true} shift={true} />
-                    </Menubar.Item>
                 </Menubar.Content>
             </Menubar.Menu>
             <Menubar.Menu>
@@ -349,11 +351,16 @@
                     {/if}
                     <Menubar.Separator />
                     <Menubar.Item
-                        onclick={() => tick().then(fileActions.deleteSelection)}
+                        onclick={() =>
+                            tick().then(async () => {
+                                if (closingSelection) await fileActions.deleteSelectedFiles();
+                                else await fileActions.deleteSelection();
+                            })}
                         disabled={$selection.size == 0}
                     >
-                        <Trash2 size="16" />
-                        {i18n._('menu.delete')}
+                        {#if closingSelection}<FileX size="16" />Close{:else}<Trash2
+                                size="16"
+                            />{i18n._('menu.delete')}{/if}
                         <Shortcut key="⌫" ctrl={true} />
                     </Menubar.Item>
                 </Menubar.Content>
@@ -542,24 +549,60 @@
                     {i18n._('menu.help')}
                 </span>
             </Button>
-            <Button
-                variant="ghost"
-                href="https://opencollective.com/gpxstudio"
-                target="_blank"
-                class="cursor-default h-fit rounded-md font-bold text-support hover:text-support px-3 py-0.5"
-                aria-label={i18n._('menu.donate')}
-            >
-                <HeartHandshake size="18" class="md:hidden" />
-                <span class="hidden md:flex flex-row items-center">
-                    {i18n._('menu.donate')}
-                    <Heart size="16" class="ml-1" fill="var(--support)" />
-                </span>
-            </Button>
+            <Menubar.Root class="border-none shadow-none h-fit p-0">
+                <Menubar.Menu>
+                    <Menubar.Trigger
+                        class="h-fit min-w-0 max-w-40 gap-1.5 px-2 py-0.5"
+                        aria-label={$driveAccount ? 'Google account menu' : 'Connect GDrive'}
+                        title={$driveAccount?.emailAddress || 'Google account'}
+                    >
+                        {#if $driveAccount}
+                            <span
+                                class="inline-flex size-6 items-center justify-center rounded-full bg-secondary text-xs font-semibold"
+                                aria-hidden="true">{accountInitials($driveAccount)}</span
+                            >
+                        {:else}
+                            <UserRound class="size-4 shrink-0" /><span class="hidden md:block"
+                                >Connect GDrive</span
+                            >
+                        {/if}
+                    </Menubar.Trigger>
+                    <Menubar.Content>
+                        {#if $driveAccount}
+                            <Menubar.Item disabled
+                                >{$driveAccount.emailAddress ||
+                                    $driveAccount.displayName ||
+                                    'GDrive connected'}</Menubar.Item
+                            >
+                            <Menubar.Separator />
+                            <Menubar.Item
+                                disabled={$driveBatchActions.busy}
+                                onclick={() => $driveBatchActions.disconnect?.()}
+                                ><LogOut size="16" />Disconnect GDrive</Menubar.Item
+                            >
+                        {:else}
+                            <Menubar.Item
+                                disabled={$driveBatchActions.busy}
+                                onclick={() => $driveBatchActions.connect?.()}
+                                ><UserRound size="16" />Connect GDrive</Menubar.Item
+                            >
+                        {/if}
+                        <Menubar.Separator />
+                        <Menubar.Item
+                            onclick={() =>
+                                setTimeout(() => {
+                                    aboutOpen = true;
+                                }, 0)}><Info size="16" />About trail-explorer</Menubar.Item
+                        >
+                    </Menubar.Content>
+                </Menubar.Menu>
+            </Menubar.Root>
         </div>
     </div>
 </div>
 
 <Export />
+<FileDestinationDialog />
 <LayerControlSettings bind:open={layerSettingsOpen} />
 
 <svelte:window
@@ -582,7 +625,7 @@
             createFile();
             e.preventDefault();
         } else if (e.key === 'o' && (e.metaKey || e.ctrlKey)) {
-            triggerFileInput();
+            fileDestination.set({ mode: 'open' });
             e.preventDefault();
         } else if (e.key === 'd' && (e.metaKey || e.ctrlKey)) {
             fileActions.duplicateSelection();
@@ -602,14 +645,9 @@
                 pasteSelection();
                 e.preventDefault();
             }
-        } else if ((e.key === 's' || e.key == 'S') && (e.metaKey || e.ctrlKey)) {
-            if (e.shiftKey) {
-                if (fileStateCollection.size > 0) {
-                    exportState.current = ExportState.ALL;
-                }
-            } else if ($selection.size > 0) {
-                exportState.current = ExportState.SELECTION;
-            }
+        } else if ((e.key === 's' || e.key === 'S') && (e.metaKey || e.ctrlKey)) {
+            if (!targetInput && selectedSaveIds.length === 1 && !$driveBatchActions.busy)
+                saveOpenFile(selectedSaveIds[0], e.shiftKey);
             e.preventDefault();
         } else if ((e.key === 'z' || e.key == 'Z') && (e.metaKey || e.ctrlKey)) {
             if (e.shiftKey) {
@@ -697,6 +735,17 @@
         }
     }}
 />
+
+<Dialog.Root bind:open={aboutOpen}>
+    <Dialog.Content>
+        <Dialog.Header
+            ><Dialog.Title>About trail-explorer</Dialog.Title><Dialog.Description
+                >GPX editing, cloud files, and route sharing.</Dialog.Description
+            ></Dialog.Header
+        >
+        <ProjectCredit />
+    </Dialog.Content>
+</Dialog.Root>
 
 <style lang="postcss">
     @reference "../../app.css";

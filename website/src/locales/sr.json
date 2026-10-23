@@ -538,7 +538,7 @@
         "title": "Napravi svoju mapu",
         "maptiler_key": "Ključ MapTiler-a (opciono, potreban samo za MapTiler mape)",
         "file_urls": "URL-ovi datoteka (razdvojeni zarezima)",
-        "drive_ids": "Id datoteke sa Google diska (razdvojeni zarezima)",
+        "drive_ids": "Id datoteke sa GDrive (razdvojeni zarezima)",
         "basemap": "Osnovna mapa",
         "height": "Visina",
         "fill_by": "Popuni sa",

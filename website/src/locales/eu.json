@@ -538,7 +538,7 @@
         "title": "Sortu zure mapa",
         "maptiler_key": "MapTiler gakoa (aukeran, bakarrik behar da MapTiler mapetan)",
         "file_urls": "Fitxategien URLak (komarekin banatuta)",
-        "drive_ids": "Google Drive fitxategien IDak (komarekin banatuta)",
+        "drive_ids": "GDrive fitxategien IDak (komarekin banatuta)",
         "basemap": "Oinarrizko-mapa",
         "height": "Altuera",
         "fill_by": "Bete honela",

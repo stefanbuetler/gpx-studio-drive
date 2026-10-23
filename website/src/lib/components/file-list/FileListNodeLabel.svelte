@@ -1,4 +1,10 @@
 <script lang="ts">
+    import {
+        driveLocalActions,
+        cloudFiles,
+        cloudSaveStatus,
+        saveOpenFile,
+    } from '$lib/drive/browser';
     import { Button } from '$lib/components/ui/button';
     import * as ContextMenu from '$lib/components/ui/context-menu';
     import Shortcut from '$lib/components/Shortcut.svelte';
@@ -17,6 +23,12 @@
         Maximize,
         Scissors,
         FileStack,
+        FileX,
+        Save,
+        Share2,
+        Check,
+        LoaderCircle,
+        CircleAlert,
     } from '@lucide/svelte';
     import {
         ListFileItem,
@@ -25,7 +37,7 @@
         ListWaypointItem,
         type ListItem,
     } from './file-list';
-    import { getContext } from 'svelte';
+    import { getContext, tick } from 'svelte';
     import { GPXTreeElement, Track, type AnyGPXTreeElement, Waypoint, GPXFile } from 'gpx';
     import { i18n } from '$lib/i18n.svelte';
     import MetadataDialog from '$lib/components/file-list/metadata/MetadataDialog.svelte';
@@ -55,6 +67,14 @@
     let orientation = getContext<'vertical' | 'horizontal'>('orientation');
     let embedding = getContext<boolean>('embedding');
 
+    let contextOpen = $state(false);
+    async function pasteFromMenu() {
+        // Close the portal before paste replaces the GPX tree beneath it.
+        // Otherwise its old menu can intercept the next paste or drag.
+        contextOpen = false;
+        await tick();
+        pasteSelection();
+    }
     let singleSelection = $derived($selection.size === 1);
 
     let nodeColors: string[] = $derived.by(() => {
@@ -96,13 +116,18 @@
     );
 
     let hidden = $derived(
-        item.level === ListLevel.WAYPOINTS ? node._data.hiddenWpt : node._data.hidden
+        Array.isArray(node)
+            ? node.every((waypoint) => waypoint._data.hidden)
+            : item.level === ListLevel.WAYPOINTS
+              ? node._data.hiddenWpt
+              : node._data.hidden
     );
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <ContextMenu.Root
+    bind:open={contextOpen}
     onOpenChange={(open) => {
         if (open) {
             if (!$selection.has(item)) {
@@ -114,6 +139,16 @@
     <ContextMenu.Trigger class="grow truncate">
         <Button
             variant="ghost"
+            aria-label={label}
+            title={item instanceof ListFileItem
+                ? $cloudFiles[item.getFileId()]?.remoteName
+                    ? 'GDrive file — writable files save automatically'
+                    : 'Local file — only in this browser'
+                : undefined}
+            onclick={() => {
+                if (item instanceof ListFileItem && $selection.has(item))
+                    boundsManager.centerMapOnSelection();
+            }}
             class="relative w-full p-0 overflow-hidden border-none focus-visible:ring-0 focus-visible:ring-offset-0 flex flex-row {orientation ===
             'vertical'
                 ? 'h-7'
@@ -199,6 +234,42 @@
                 >
                     {label}
                 </span>
+                {#if item instanceof ListFileItem && $cloudFiles[item.getFileId()]}
+                    {@const id = item.getFileId()}
+                    {@const saving = $cloudSaveStatus[id]}
+                    {@const state =
+                        saving?.state === 'saving'
+                            ? 'Saving…'
+                            : saving?.state === 'error' || $cloudFiles[id].dirty
+                              ? 'Unsaved changes'
+                              : 'Saved'}
+                    <span
+                        role="status"
+                        class="mx-1 shrink-0"
+                        data-testid={$cloudFiles[id].dirty ? 'unsaved-cloud-file' : undefined}
+                        title={saving?.message
+                            ? `Could not save to GDrive. ${saving.message} Use Save to retry.`
+                            : state === 'Saving…'
+                              ? 'Saving changes to GDrive…'
+                              : state === 'Unsaved changes'
+                                ? 'Changes are stored in this browser and waiting to save to GDrive.'
+                                : 'All changes saved to GDrive.'}
+                    >
+                        <span class="sr-only">{state}</span>
+                        {#if state === 'Saving…'}<LoaderCircle
+                                class="size-3.5 animate-spin text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                        {:else if state === 'Unsaved changes'}<CircleAlert
+                                class="size-3.5 text-amber-600"
+                                aria-hidden="true"
+                            />
+                        {:else}<Check
+                                class="size-3.5 text-muted-foreground"
+                                aria-hidden="true"
+                            />{/if}
+                    </span>
+                {/if}
                 {#if hidden}
                     <EyeOff
                         size="10"
@@ -211,6 +282,30 @@
         </Button>
     </ContextMenu.Trigger>
     <ContextMenu.Content>
+        {#if !embedding && item instanceof ListFileItem && $driveLocalActions[item.getFileId()]}
+            {@const driveActions = $driveLocalActions[item.getFileId()]}
+            <ContextMenu.Item
+                disabled={driveActions.busy || !driveActions.save}
+                onclick={() => saveOpenFile(item.getFileId())}
+            >
+                <Save size="16" />Save
+            </ContextMenu.Item>
+            <ContextMenu.Item
+                disabled={driveActions.busy}
+                onclick={() => saveOpenFile(item.getFileId(), true)}
+            >
+                <Save size="16" />Save as…
+            </ContextMenu.Item>
+            {#if driveActions.share}
+                <ContextMenu.Item
+                    disabled={driveActions.busy}
+                    onclick={() => driveActions.share?.()}
+                >
+                    <Share2 size="16" />Share…
+                </ContextMenu.Item>
+            {/if}
+            <ContextMenu.Separator />
+        {/if}
         {#if item instanceof ListFileItem || item instanceof ListTrackItem}
             <ContextMenu.Item
                 disabled={!singleSelection}
@@ -285,12 +380,12 @@
             <Shortcut key="D" ctrl={true} />
         </ContextMenu.Item>
         {#if orientation === 'vertical'}
-            <ContextMenu.Item onclick={() => selection.copySelection()}>
+            <ContextMenu.Item onclick={() => { contextOpen = false; selection.copySelection(); }}>
                 <ClipboardCopy size="16" />
                 {i18n._('menu.copy')}
                 <Shortcut key="C" ctrl={true} />
             </ContextMenu.Item>
-            <ContextMenu.Item onclick={() => selection.cutSelection()}>
+            <ContextMenu.Item onclick={() => { contextOpen = false; selection.cutSelection(); }}>
                 <Scissors size="16" />
                 {i18n._('menu.cut')}
                 <Shortcut key="X" ctrl={true} />
@@ -299,7 +394,7 @@
                 disabled={$copied === undefined ||
                     $copied.length === 0 ||
                     !allowedPastes[$copied[0].level].includes(item.level)}
-                onclick={pasteSelection}
+                onclick={pasteFromMenu}
             >
                 <ClipboardPaste size="16" />
                 {i18n._('menu.paste')}
@@ -307,9 +402,14 @@
             </ContextMenu.Item>
         {/if}
         <ContextMenu.Separator />
-        <ContextMenu.Item onclick={fileActions.deleteSelection}>
-            <Trash2 size="16" />
-            {i18n._('menu.delete')}
+        <ContextMenu.Item
+            onclick={item instanceof ListFileItem
+                ? fileActions.deleteSelectedFiles
+                : fileActions.deleteSelection}
+        >
+            {#if item instanceof ListFileItem}<FileX size="16" />Close{:else}<Trash2
+                    size="16"
+                />{i18n._('menu.delete')}{/if}
             <Shortcut key="⌫" ctrl={true} />
         </ContextMenu.Item>
     </ContextMenu.Content>

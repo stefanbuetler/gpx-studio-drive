@@ -1,3 +1,4 @@
+import { serviceURL } from '$lib/service-url';
 import type { Coordinates } from 'gpx';
 import { TrackPoint, distance } from 'gpx';
 import { settings } from '$lib/logic/settings';
@@ -109,7 +110,7 @@ async function getGraphHopperRoute(
     graphHopperProfile: string,
     privateRoads: boolean
 ): Promise<TrackPoint[]> {
-    let response = await fetch('https://graphhopper.gpx.studio/route', {
+    let response = await fetch(serviceURL('https://graphhopper.gpx.studio/route'), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -127,21 +128,27 @@ async function getGraphHopperRoute(
     });
 
     if (!response.ok) {
-        const error = await response.json();
-        if (error.message.includes('Cannot find point 0')) {
+        const error = await response.json().catch(() => ({
+            message: 'Routing service is unavailable. Please try again.',
+        }));
+        const message =
+            typeof error.message === 'string'
+                ? error.message
+                : 'Routing service is unavailable. Please try again.';
+        if (message.includes('Cannot find point 0')) {
             throw new Error('toolbar.routing.error.from');
-        } else if (error.message.includes('Cannot find point 1')) {
+        } else if (message.includes('Cannot find point 1')) {
             if (points.length == 3) {
                 throw new Error('toolbar.routing.error.via');
             } else {
                 throw new Error('toolbar.routing.error.to');
             }
-        } else if (error.hints[0].details.includes('PointDistanceExceededException')) {
+        } else if (error.hints?.[0]?.details?.includes('PointDistanceExceededException')) {
             throw new Error('toolbar.routing.error.distance');
-        } else if (error.hints[0].details.includes('ConnectionNotFoundException')) {
+        } else if (error.hints?.[0]?.details?.includes('ConnectionNotFoundException')) {
             throw new Error('toolbar.routing.error.connection');
         } else {
-            throw new Error(error.message);
+            throw new Error(message);
         }
     }
 

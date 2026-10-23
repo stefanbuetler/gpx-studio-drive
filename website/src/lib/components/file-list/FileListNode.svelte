@@ -24,6 +24,7 @@
     import { settings } from '$lib/logic/settings';
     import type { GPXFileWithStatistics } from '$lib/logic/statistics-tree';
     import { selection } from '$lib/logic/selection';
+    import { getGPXName } from '$lib/logic/file-name';
 
     let {
         node,
@@ -43,7 +44,7 @@
 
     let label = $derived(
         node instanceof GPXFile && item instanceof ListFileItem
-            ? node.metadata.name
+            ? getGPXName(node)
             : node instanceof Track
               ? (node.name ?? `${i18n._('gpx.track')} ${(item as ListTrackItem).trackIndex + 1}`)
               : node instanceof TrackSegment

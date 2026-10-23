@@ -55,6 +55,7 @@
 
     $effect(() => {
         if (sortable && node) {
+            sortable.updateNode(node);
             sortable.updateElements();
         }
     });

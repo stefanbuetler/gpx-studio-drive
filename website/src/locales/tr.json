@@ -538,7 +538,7 @@
         "title": "Kendi haritanı oluştur!",
         "maptiler_key": "MapTiler key (optional, only required for MapTiler maps)",
         "file_urls": "Dosya URLleri (virgülle ayrımış)",
-        "drive_ids": "Google Drive dosya ID'si (virgülle ayrılmış)",
+        "drive_ids": "GDrive dosya ID'si (virgülle ayrılmış)",
         "basemap": "Temel Harita",
         "height": "Yükseklik",
         "fill_by": "İle doldur",

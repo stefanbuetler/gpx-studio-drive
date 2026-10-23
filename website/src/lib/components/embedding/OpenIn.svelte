@@ -7,9 +7,11 @@
     let {
         files,
         ids,
+        resourceKeys = {},
     }: {
         files: string[];
         ids: string[];
+        resourceKeys?: Record<string, string>;
     } = $props();
 </script>
 
@@ -20,6 +22,8 @@
         ? `files=${encodeURIComponent(JSON.stringify(files))}`
         : ''}{files.length > 0 && ids.length > 0 ? '&' : ''}{ids.length > 0
         ? `ids=${encodeURIComponent(JSON.stringify(ids))}`
+        : ''}{Object.keys(resourceKeys).length
+        ? `&resourceKeys=${encodeURIComponent(JSON.stringify(resourceKeys))}`
         : ''}"
     target="_blank"
 >

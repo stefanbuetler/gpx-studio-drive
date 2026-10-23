@@ -538,7 +538,7 @@
         "title": "Crea la tua mappa",
         "maptiler_key": "MapTiler key (optional, only required for MapTiler maps)",
         "file_urls": "URL dei file (separati da virgole)",
-        "drive_ids": "ID dei file in Google Drive (separati da virgole)",
+        "drive_ids": "ID dei file in GDrive (separati da virgole)",
         "basemap": "Mappa Base",
         "height": "Altezza",
         "fill_by": "Riempi con",

@@ -23,7 +23,7 @@
         children: Snippet;
     } = $props();
 
-    const appRoutes = ['/[[language]]/app', '/[[language]]/embed'];
+    const appRoutes = ['/[[language]]/app', '/[[language]]/embed', '/[[language]]/share'];
 
     onMount(() => {
         if (page.url.searchParams.has('embed')) {
@@ -55,8 +55,12 @@
     });
 
     $effect(() => {
+        if (page.route.id === '/[[language]]/share') {
+            document.title = 'Shared route — trail-explorer';
+            return;
+        }
         if (i18n.isLoading) return;
-        let title = `gpx.studio — ${i18n._(`metadata.${page.route.id?.replace('/[[language]]', '').split('/')[1] ?? 'home'}_title`)}`;
+        let title = `trail-explorer — ${i18n._(`metadata.${page.route.id?.replace('/[[language]]', '').split('/')[1] ?? 'home'}_title`)}`;
         if (page.params.guide) {
             document.title = `${title} | ${data.guideTitles[page.params.guide]}`;
         } else {

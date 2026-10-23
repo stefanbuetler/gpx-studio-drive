@@ -1,11 +1,22 @@
+import { publicDriveURL } from '$lib/drive/public';
 import { PUBLIC_MAPTILER_KEY } from '$env/static/public';
-import { basemaps } from '$lib/assets/layers';
+import { type LayerTreeType, type CustomLayer, basemaps } from '$lib/assets/layers';
 
 export type EmbeddingOptions = {
     key: string;
     files: string[];
     ids: string[];
+    resourceKeys?: Record<string, string>;
     basemap: string;
+    overlays: LayerTreeType;
+    overpassQueries: LayerTreeType;
+    opacities: Record<string, number>;
+    customLayers: Record<string, CustomLayer>;
+    terrainSource: 'mapterhorn';
+    defaultWidth: number;
+    defaultOpacity: number;
+    pitch: number;
+    bearing: number;
     elevation: {
         show: boolean;
         height: number;
@@ -29,7 +40,17 @@ export const defaultEmbeddingOptions = {
     key: '',
     files: [],
     ids: [],
+    resourceKeys: {},
     basemap: 'libertyTopo',
+    overlays: {},
+    overpassQueries: {},
+    opacities: {},
+    customLayers: {},
+    terrainSource: 'mapterhorn',
+    defaultWidth: 5,
+    defaultOpacity: 0.7,
+    pitch: 0,
+    bearing: 0,
     elevation: {
         show: true,
         height: 170,
@@ -53,14 +74,18 @@ export function getMergedEmbeddingOptions(
     options: any,
     defaultOptions: any = defaultEmbeddingOptions
 ): EmbeddingOptions {
-    const mergedOptions = JSON.parse(JSON.stringify(defaultOptions));
-    for (const key in options) {
+    const mergedOptions = JSON.parse(JSON.stringify(defaultOptions ?? {}));
+    for (const key of Object.keys(options ?? {})) {
+        if (['__proto__', 'constructor', 'prototype'].includes(key)) continue;
         if (
             typeof options[key] === 'object' &&
             options[key] !== null &&
             !Array.isArray(options[key])
         ) {
-            mergedOptions[key] = getMergedEmbeddingOptions(options[key], defaultOptions[key]);
+            mergedOptions[key] = getMergedEmbeddingOptions(
+                options[key],
+                defaultOptions?.[key] ?? {}
+            );
         } else {
             mergedOptions[key] = options[key];
         }
@@ -81,12 +106,12 @@ export function getCleanedEmbeddingOptions(
         ) {
             cleanedOptions[key] = getCleanedEmbeddingOptions(
                 cleanedOptions[key],
-                defaultOptions[key]
+                defaultOptions?.[key] ?? {}
             );
             if (Object.keys(cleanedOptions[key]).length === 0) {
                 delete cleanedOptions[key];
             }
-        } else if (JSON.stringify(cleanedOptions[key]) === JSON.stringify(defaultOptions[key])) {
+        } else if (JSON.stringify(cleanedOptions[key]) === JSON.stringify(defaultOptions?.[key])) {
             delete cleanedOptions[key];
         }
     }
@@ -101,11 +126,13 @@ export const allowedEmbeddingBasemaps = Object.keys(basemaps).filter(
 );
 
 export function getFilesFromEmbeddingOptions(options: EmbeddingOptions): string[] {
-    return options.files.concat(options.ids.map((id) => getURLForGoogleDriveFile(id)));
+    return options.files.concat(
+        options.ids.map((id) => getURLForGoogleDriveFile(id, options.resourceKeys?.[id]))
+    );
 }
 
-export function getURLForGoogleDriveFile(fileId: string): string {
-    return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=AIzaSyA2ZadQob_hXiT2VaYIkAyafPvz_4ZMssk`;
+export function getURLForGoogleDriveFile(fileId: string, resourceKey?: string): string {
+    return publicDriveURL(fileId, resourceKey);
 }
 
 export function convertOldEmbeddingOptions(options: URLSearchParams): any {

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { PUBLIC_MAPTILER_KEY } from '$env/static/public';
     import { page } from '$app/state';
     import { onMount } from 'svelte';
     import Embedding from '$lib/components/embedding/Embedding.svelte';
@@ -7,24 +8,27 @@
         type EmbeddingOptions,
     } from '$lib/components/embedding/embedding';
 
-    let embeddingOptions: EmbeddingOptions | undefined = undefined;
+    let embeddingOptions = $state<EmbeddingOptions>();
+    let error = $state('');
 
     onMount(() => {
-        let options = page.url.searchParams.get('options');
-        if (options === null) {
-            return;
-        }
-        options = JSON.parse(options);
-        if (options === null) {
-            return;
-        }
-        embeddingOptions = getMergedEmbeddingOptions(options);
-        if (embeddingOptions.key === '' && embeddingOptions.basemap === 'satellite') {
-            embeddingOptions.basemap = 'libertyTopo';
+        try {
+            const raw = page.url.searchParams.get('options');
+            if (!raw) return;
+            const options = JSON.parse(raw);
+            if (!options || typeof options !== 'object' || Array.isArray(options))
+                throw new Error('Invalid options');
+            embeddingOptions = getMergedEmbeddingOptions({ key: PUBLIC_MAPTILER_KEY, ...options });
+        } catch {
+            error = 'This embed has invalid view settings.';
         }
     });
 </script>
 
-{#if embeddingOptions}
-    <Embedding options={embeddingOptions} hash={page.url.hash} />
+{#if error}<p role="alert">{error}</p>{:else if embeddingOptions}
+    <Embedding
+        options={embeddingOptions}
+        hash={page.url.hash}
+        useHash={page.url.searchParams.get('fit') !== 'route'}
+    />
 {/if}

@@ -18,7 +18,7 @@
     import { onDestroy, onMount } from 'svelte';
     import { page } from '$app/state';
     import { gpxStatistics, hoveredPoint, slicedGPXStatistics } from '$lib/logic/statistics';
-    import { downloadPublicGPX } from '$lib/drive/public';
+    import { downloadPublicGPX, ensurePublicDriveConfiguration } from '$lib/drive/public';
     import { toast } from 'svelte-sonner';
     import { getURLForGoogleDriveFile } from '$lib/components/embedding/embedding';
     import { db } from '$lib/db';
@@ -47,6 +47,7 @@
                 const resourceKeys: Record<string, string> = JSON.parse(
                     page.url.searchParams.get('resourceKeys') || '{}'
                 );
+                if (ids.length) await ensurePublicDriveConfiguration();
                 const urls = files.concat(
                     ids.map((id) => getURLForGoogleDriveFile(id, resourceKeys[id]))
                 );

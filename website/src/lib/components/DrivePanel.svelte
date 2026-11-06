@@ -80,6 +80,7 @@
     let shareFile = $state<DriveGPXFile | null>(null);
     let shareOpen = $state(false);
     let shareLocalId = $state('');
+    let shareNeedsReconnect = $state(false);
     let connected = $state(false);
     let allDrive = $state(false);
     let busy = $state(false);
@@ -124,6 +125,7 @@
     $effect(() => {
         const actions: Parameters<typeof driveLocalActions.set>[0] = {};
         for (const [localId] of $fileStateCollection) {
+            const cloud = $cloudFiles[localId];
             actions[localId] = {
                 busy,
                 save: () => {
@@ -132,13 +134,10 @@
                 saveAs: () => {
                     void save(localId, true);
                 },
-                ...(connected &&
-                savedRoutes[localId]?.account === activeAccount &&
-                fileStateCollection.getFile(localId)?._data.driveIdentity ===
-                    savedRoutes[localId]?.identity
+                ...(cloud && cloudRoute(localId)
                     ? {
                           share: () => offerShare(localId),
-                          remoteName: savedRoutes[localId].remote.name,
+                          remoteName: cloudRoute(localId)!.remote.name,
                       }
                     : {}),
             };
@@ -764,24 +763,43 @@
             if (!$driveBrowserOpen) toast.success(status);
         });
     }
+    function cloudRoute(localId: string): SavedRoute | undefined {
+        const file = fileStateCollection.getFile(localId);
+        const saved = file?._data.cloudLink as SavedRoute | undefined;
+        return saved && saved.identity === file?._data.driveIdentity ? saved : undefined;
+    }
     function offerShare(localId: string) {
-        const saved = savedRoutes[localId];
-        if (
-            !connected ||
-            !saved ||
-            saved.account !== activeAccount ||
-            fileStateCollection.getFile(localId)?._data.driveIdentity !== saved.identity
-        )
-            return;
+        const saved = cloudRoute(localId);
+        if (!saved) return;
         shareLocalId = localId;
-        shareFile = saved.remote;
+        shareFile = structuredClone(saved.remote);
+        shareNeedsReconnect = !drive.connected || saved.account !== activeAccount;
         shareOpen = true;
+    }
+    async function reconnectForShare() {
+        const saved = cloudRoute(shareLocalId);
+        if (!saved) throw new Error('This cloud file is no longer open.');
+        try {
+            // Reconnection never changes the file's public permissions.
+            if (drive.connected && activeAccount !== saved.account) await drive.connect();
+            const account = await ensureConnection();
+            if (account !== saved.account)
+                throw new Error(
+                    'This route belongs to another Google account. Switch to that account and try again.'
+                );
+            savedRoutes[shareLocalId] = JSON.parse(JSON.stringify(saved));
+            shareNeedsReconnect = false;
+        } finally {
+            connected = drive.connected;
+            if (!connected) driveAccount.set(null);
+        }
     }
     async function saveBeforeShare() {
         let saved: DriveGPXFile | undefined;
         await action(async () => {
             saved = await saveLocalToDrive(shareLocalId);
         });
+        if (!drive.connected) shareNeedsReconnect = true;
         if (!saved) throw new Error(error || 'Save cancelled. Your file has not been shared.');
         shareFile = saved;
     }
@@ -848,7 +866,10 @@
             throw e;
         } finally {
             connected = drive.connected;
-            if (!connected) driveAccount.set(null);
+            if (!connected) {
+                driveAccount.set(null);
+                shareNeedsReconnect = true;
+            }
             allDrive = drive.searchesAllDrive;
             busy = false;
         }
@@ -1020,6 +1041,8 @@
     <DriveShareDialog
         file={shareFile}
         onshare={share}
+        needsReconnect={shareNeedsReconnect}
+        onreconnect={reconnectForShare}
         dirty={$cloudFiles[shareLocalId]?.dirty ?? false}
         onsave={saveBeforeShare}
         bind:open={shareOpen}

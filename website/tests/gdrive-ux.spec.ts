@@ -314,6 +314,56 @@ test('cloud edits show an unsaved marker and Share requires saving; disconnect r
     await expect(
         tree.getByRole('button', { name: 'Edited forest loop', exact: true }).last()
     ).toBeVisible();
+    // A disconnected cloud file must retain Share in both menus.
+    await page.keyboard.press('Escape');
+    await menu(page, 'Share…');
+    await expect(share).toContainText('Reconnect GDrive to share this route.');
+    await expect(share.getByRole('button', { name: 'Make public and create link' })).toHaveCount(0);
+    await share.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await tree
+        .getByRole('button', { name: 'Edited forest loop', exact: true })
+        .last()
+        .click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Share…', exact: true }).click();
+    await page.evaluate(() => {
+        const oauth = (window as any).google.accounts.oauth2;
+        const original = oauth.initTokenClient;
+        oauth.initTokenClient = (options: any) => ({
+            requestAccessToken() {
+                oauth.initTokenClient = original;
+                options.error_callback({ type: 'popup_closed' });
+            },
+        });
+    });
+    await share.getByRole('button', { name: 'Reconnect GDrive', exact: true }).click();
+    await expect(share.getByRole('alert')).toContainText('Google sign-in was cancelled');
+    await expect(
+        share.getByRole('button', { name: 'Reconnect GDrive', exact: true })
+    ).toBeEnabled();
+    // Wrong-account reconnection cannot expose the publish action.
+    await page.route('https://www.googleapis.com/drive/v3/about?**', (r) =>
+        r.fulfill({
+            json: { user: { permissionId: 'other-account', displayName: 'Other Walker' } },
+        })
+    );
+    await share.getByRole('button', { name: 'Reconnect GDrive', exact: true }).click();
+    await expect(share.getByRole('alert')).toContainText('another Google account');
+    await expect(share.getByRole('button', { name: 'Make public and create link' })).toHaveCount(0);
+    await page.route('https://www.googleapis.com/drive/v3/about?**', (r) =>
+        r.fulfill({ json: { user: { permissionId: 'ux-account', displayName: 'Trail Walker' } } })
+    );
+    await share.getByRole('button', { name: 'Reconnect GDrive', exact: true }).click();
+    await expect(share.getByRole('button', { name: 'Make public and create link' })).toBeEnabled();
+    // Reconnection alone must never publish or upload a route.
+    expect(writes).toHaveLength(2);
+    await share.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.reload();
+    const restored = tree.getByRole('button', { name: 'Edited forest loop', exact: true }).last();
+    await expect(restored).toBeVisible();
+    await restored.click();
+    await menu(page, 'Share…');
+    await expect(share).toContainText('Reconnect GDrive to share this route.');
+    expect(writes).toHaveLength(2);
     expect(errors).toEqual([]);
 });
 

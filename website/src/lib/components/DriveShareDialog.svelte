@@ -9,17 +9,32 @@
         onshare,
         dirty = false,
         onsave,
+        needsReconnect = false,
+        onreconnect,
     }: {
         open: boolean;
         file: DriveGPXFile;
         onshare: (file: DriveGPXFile) => Promise<string>;
         dirty?: boolean;
         onsave?: () => Promise<void>;
+        needsReconnect?: boolean;
+        onreconnect?: () => Promise<void>;
     } = $props();
     let busy = $state(false);
     let link = $state('');
     let error = $state('');
     let notice = $state('');
+    async function reconnect() {
+        busy = true;
+        error = '';
+        try {
+            await onreconnect?.();
+        } catch (e) {
+            error = e instanceof Error ? e.message : 'Could not reconnect GDrive. Try again.';
+        } finally {
+            busy = false;
+        }
+    }
     async function saveEdits() {
         busy = true;
         error = '';
@@ -68,7 +83,17 @@
             <Dialog.Title>Share route</Dialog.Title>
             <Dialog.Description>{file.name}</Dialog.Description>
         </Dialog.Header>
-        {#if !link}
+        {#if needsReconnect && !link}
+            <p>Reconnect GDrive to share this route.</p>
+            <Dialog.Footer>
+                <Button variant="outline" disabled={busy} onclick={() => (open = false)}
+                    >Cancel</Button
+                >
+                <Button disabled={busy} onclick={reconnect}
+                    >{busy ? 'Connecting…' : 'Reconnect GDrive'}</Button
+                >
+            </Dialog.Footer>
+        {:else if !link}
             {#if dirty}
                 <div class="rounded-md border p-3 text-sm space-y-2">
                     <p>
